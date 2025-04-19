@@ -16,7 +16,7 @@ wget -q -O /var/www/html/nothing.jpg https://raw.githubusercontent.com/syntaxben
 wget -q -O /var/www/html/index.html https://raw.githubusercontent.com/syntaxbender/linux-infrastructure/refs/heads/main/data/nginx/var_html/index.html
 
 mkdir -p /etc/nginx/ssl/ && \
-  openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /etc/nginx/ssl/nginx.key -out /etc/nginx/ssl/nginx.crt
+  openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /etc/nginx/ssl/nginx.key -out /etc/nginx/ssl/nginx.crt -subj "/C=/ST=/L=/O=/OU=/CN=/emailAddress="
 
 [ -f "/etc/nginx/sites-enabled/default" ] && \
   rm /etc/nginx/sites-enabled/default || \
