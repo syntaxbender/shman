@@ -5,7 +5,7 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-SERVER_IP=192.168.1.100
+SERVER_IP=$(curl checkip.amazonaws.com)
 
 [ -f "/var/www/html/nothing.jpg" ] && \
   mv /var/www/html/nothing.jpg /var/www/html/nothing-$(uuidgen).jpg.bak
