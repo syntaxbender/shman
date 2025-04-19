@@ -61,7 +61,6 @@ fi
 cat > "/etc/nginx/sites-available/$DOMAIN.conf" <<EOF
 server {
     listen 443 ssl;
-    server_name www.$DOMAIN;
 
     location / {
         proxy_pass       $PROXY_PASS;
@@ -81,9 +80,18 @@ server {
 }
 EOF
 
+
+
+if [ "$WWW_REDIRECT" = true ]; then
+   SERVER_NAME_LINE="server_name www.$DOMAIN;"
+   sed -i "/listen 443 ssl/a $SERVER_NAME_LINE" /etc/nginx/sites-available/$DOMAIN.conf
+else
+   SERVER_NAME_LINE="server_name $DOMAIN;"
+   sed -i "/listen 443 ssl/a $SERVER_NAME_LINE" /etc/nginx/sites-available/$DOMAIN.conf
+fi
+
 if [ "$WWW_REDIRECT" = true ]; then
 cat >> "/etc/nginx/sites-available/$DOMAIN.conf" <<EOF
-
 server {
     listen 443 ssl;
     server_name $DOMAIN;
