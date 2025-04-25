@@ -75,7 +75,7 @@ if [[ -z "$SVC_NAME" || -z "$USER" || -z "$EXEC_NPM" || -z "$DESC" ]]; then
     exit 1
 fi
 
-cat > "/etc/systemd/system/$SVC_NAME.conf" <<EOF
+cat > "/etc/systemd/system/$SVC_NAME.service" <<EOF
 [Unit]
 Description=$DESC
 
