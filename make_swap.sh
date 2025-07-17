@@ -32,7 +32,7 @@ if [[ -z "$SWAP_SIZE" ]]; then
     exit 1
 fi
 
-fallocate -l "${SWAP_SIZE_MB}M" /swapfile
+fallocate -l "${SWAP_SIZE}M" /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
