@@ -93,7 +93,7 @@ EOF
 ENV_FILE_LINE="EnvironmentFile=/home/$USER/app/.env"
 PORT_LINE="Environment=PORT=$PORT"
 [ -n "$PORT" ] && \
-    sed -i "/Restart/a $PORT_LINE" /etc/systemd/system/$SVC_NAME.conf
+    sed -i "/Restart/a $PORT_LINE" /etc/systemd/system/$SVC_NAME.service
 
 [ "$ENV_FILE" = true ] && \
-    sed -i "/Restart/a $ENV_FILE_LINE" /etc/systemd/system/$SVC_NAME.conf
+    sed -i "/Restart/a $ENV_FILE_LINE" /etc/systemd/system/$SVC_NAME.service
