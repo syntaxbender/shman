@@ -14,53 +14,17 @@ ENV_FILE=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -sn|--svc-name)
-      if [[ -n "$2" ]]; then
-        SVC_NAME="$2"
-        shift
-      else
-        echo "Error: --svc-name requires a value."
-        exit 1
-      fi
-      ;;
+      SVC_NAME="$2"; shift;;
     -u|--user)
-      if [[ -n "$2" ]]; then
-        USER="$2"
-        shift
-      else
-        echo "Error: --user requires a value."
-        exit 1
-      fi
-      ;;
+      USER="$2"; shift;;
     -enpm|--exec-npm)
-      if [[ -n "$2" ]]; then
-        EXEC_NPM="$2"
-        shift
-      else
-        echo "Error: --exec-npm requires a value."
-        exit 1
-      fi
-      ;;
+      EXEC_NPM="$2"; shift;;
     -p|--port)
-      if [[ -n "$2" ]]; then
-        PORT="$2"
-        shift
-      else
-        echo "Error: --port requires a value."
-        exit 1
-      fi
-      ;;
+      PORT="$2"; shift;;
     -d|--description)
-      if [[ -n "$2" ]]; then
-        DESC="$2"
-        shift
-      else
-        echo "Error: --description requires a value."
-        exit 1
-      fi
-      ;;
+      DESC="$2"; shift;;
     -envf|--env-file)
-      ENV_FILE=true
-      ;;
+      ENV_FILE=true;;
     *)
       echo "Unknown option: $1"
       exit 1
@@ -69,31 +33,22 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ -z "$SVC_NAME" || -z "$USER" || -z "$EXEC_NPM" || -z "$DESC" ]]; then
+if [[
+  -z "$SVC_NAME" || -z "$USER" || -z "$EXEC_NPM" || -z "$DESC" ||
+  "$SVC_NAME" == -* || "$USER" == -* || "$EXEC_NPM" == -* || "$DESC" == -*
+]]; then
     echo "Error: --user, --exec-npm, --port, --description, --env-file args required."
     echo "Usage: [...] --user username --exec-npm "run start" --description "prod service" [--port 3000] [--env-file]"
     exit 1
 fi
 
-cat > "/etc/systemd/system/$SVC_NAME.service" <<EOF
-[Unit]
-Description=$DESC
+PORT_LINE=""
+ENV_FILE_LINE=""
+[[ -n "$PORT" ]] && PORT_LINE="Environment=PORT=$PORT"
+[[ "$ENV_FILE" = true ]] && ENV_FILE_LINE="EnvironmentFile=/home/${USER}/app/.env"
 
-[Service]
-User=$USER
-Group=$USER
-WorkingDirectory=/home/$USER/app
-ExecStart=/usr/bin/npm $EXEC_NPM
-Restart=on-failure
-Environment=NODE_ENV=production
-[Install]
-WantedBy=default.target
-EOF
+export USER EXEC_NPM DESC PORT_LINE ENV_FILE_LINE
 
-ENV_FILE_LINE="EnvironmentFile=/home/$USER/app/.env"
-PORT_LINE="Environment=PORT=$PORT"
-[ -n "$PORT" ] && \
-    sed -i "/Restart/a $PORT_LINE" /etc/systemd/system/$SVC_NAME.service
+envsubst < ./systemd/service.template > "/etc/systemd/system/${SVC_NAME}.service"
 
-[ "$ENV_FILE" = true ] && \
-    sed -i "/Restart/a $ENV_FILE_LINE" /etc/systemd/system/$SVC_NAME.service
+echo "Service file created at /etc/systemd/system/${SVC_NAME}.service"

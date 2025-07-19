@@ -1,0 +1,8 @@
+server {
+    ${LISTEN_LINE}
+    server_name ${DOMAIN};
+
+    ${SSL_LINES}
+
+    return 301 https://www.${DOMAIN}\$request_uri;
+}

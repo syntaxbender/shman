@@ -1,0 +1,15 @@
+[Unit]
+Description=${DESC}
+
+[Service]
+User=${USER}
+Group=${USER}
+WorkingDirectory=/home/${USER}/app
+ExecStart=/usr/bin/npm ${EXEC_NPM}
+Restart=on-failure
+Environment=NODE_ENV=production
+${ENV_FILE_LINE}
+${PORT_LINE}
+
+[Install]
+WantedBy=default.target

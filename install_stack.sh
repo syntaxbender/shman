@@ -23,7 +23,7 @@ log() {
 
   echo -e "${color}${timestamp} - ${message}${endcolor}"
 }
-
+INSTALL_DEPENDENCIES=false
 INSTALL_POSTGRES=false
 INSTALL_MYSQL=false
 INSTALL_NGINX=false
@@ -31,9 +31,15 @@ INSTALL_APACHE=false
 INSTALL_CERTBOT=false
 INSTALL_PHP=false
 INSTALL_NODE=false
+INSTALL_FORGEJO=false
+FORGEJO_LOOPBACK_PORT=6010
+FORGEJO_DOMAIN="git.example.com"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -dep|--dependencies)
+      INSTALL_DEPENDENCIES=true
+      ;;
     -psql|--postgresql)
       INSTALL_POSTGRES=true
       ;;
@@ -52,6 +58,9 @@ while [[ $# -gt 0 ]]; do
     --node)
       INSTALL_NODE=true
       ;;
+    --forgejo)
+      INSTALL_FORGEJO=true
+      ;;
     *)
       echo "Unknown option: $1"
       exit 1
@@ -59,8 +68,6 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-
-log "Default installations are started!" "info"
 
 if [ "$INSTALL_MYSQL" = true ]; then
   log "Set MySQL Password!" "info"
@@ -83,11 +90,15 @@ if [ "$MYSQL_ROOT_PASSWORD" != "$MYSQL_ROOT_PASSWORD_AGAIN" ]; then
 fi
 
 
-apt update && apt upgrade -y
+apt update
 needrestart -r a
-apt install -y curl gnupg2 wget net-tools dnsutils debconf-utils build-essential git gnupg lsb-release ca-certificates software-properties-common openssl uuid-runtime certbot 
-needrestart -r a
-log "Default installations are done!" "info"
+if [ "$INSTALL_DEPENDENCIES" = true ]; then
+  log "Dependency installations are started!" "info"
+  apt upgrade -y
+  apt install -y curl wget gnupg2 gnupg net-tools dnsutils debconf-utils build-essential git git-lfs lsb-release ca-certificates software-properties-common openssl uuid-runtime certbot 
+  needrestart -r a
+  log "Dependency installations are done!" "info"
+fi
 if [ "$INSTALL_NODE" = true ]; then
   log "Node installation started!" "info"
   wget -q https://deb.nodesource.com/setup_20.x -O ./nodesource.sh && \
@@ -139,3 +150,27 @@ if [ "$INSTALL_APACHE" = true ]; then
   apt install -y apache2 python3-certbot-apache
   log "Apache2 installation done!" "info"
 fi
+
+if [ "$INSTALL_FORGEJO" = true ]; then
+
+  log "Forgejo installation started!" "info"
+  FORGEJO_VERSION=curl -s https://codeberg.org/forgejo/forgejo/releases | grep -oP 'forgejo/releases/download/v\K[0-9.]+' | head -n1
+  wget -O /usr/local/bin/forgejo "https://codeberg.org/forgejo/forgejo/releases/download/v${FORGEJO_VERSION}/forgejo-${FORGEJO_VERSION}-linux-amd64"
+  chmod 755 /usr/local/bin/forgejo
+  id git &>/dev/null || adduser --system --shell /bin/bash --gecos 'Git Version Control' --group --disabled-password --home /home/git git 2>/dev/null || true
+  mkdir /var/lib/forgejo
+  chown git:git /var/lib/forgejo && chmod 750 /var/lib/forgejo
+  mkdir /etc/forgejo && chmod 750 /etc/forgejo
+  touch /etc/forgejo/app.ini && chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo && chown -R root:git /etc/forgejo
+
+  cp ./forgejo/app.ini /var/lib/forgejo/custom/conf/app.ini
+  export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT
+  envsubst < ./forgejo/app.ini.template > "/var/lib/forgejo/custom/conf/app.ini"
+  wget -O /etc/systemd/system/forgejo.service https://codeberg.org/forgejo/forgejo/raw/branch/forgejo/contrib/systemd/forgejo.service
+  ./nginx_config_gen -p "http://127.0.0.1:${FORGEJO_LOOPBACK_PORT}" -d "${FORGEJO_DOMAIN}" -ws
+  systemctl daemon-reload
+  systemctl enable forgejo.service
+  systemctl start forgejo.service
+  log "Forgejo installation done!" "info"
+fi
+

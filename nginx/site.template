@@ -1,0 +1,15 @@
+server {
+    ${LISTEN_LINE}
+    ${SERVER_NAME_LINE}
+
+    location / {
+      proxy_pass       ${PROXY_PASS};
+      proxy_set_header Host \$host;
+      proxy_set_header X-Real-IP \$remote_addr;
+      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto \$scheme;
+      ${WEBSOCKET_LINE}
+    }
+
+    ${SSL_LINES}
+}

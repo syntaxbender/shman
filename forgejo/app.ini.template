@@ -1,0 +1,70 @@
+[server]
+APP_NAME            = SyntaxBender Private Git Service
+PROTOCOL            = http
+DOMAIN              = ${FORGEJO_DOMAIN}
+HTTP_PORT           = ${FORGEJO_LOOPBACK_PORT}
+ROOT_URL            = %(PROTOCOL)s://%(DOMAIN)s:%(HTTP_PORT)s/
+DISABLE_SSH         = false
+SSH_PORT            = 22
+START_SSH_SERVER    = false
+LFS_START_SERVER    = true
+LFS_CONTENT_PATH    = data/lfs
+LANDING_PAGE        = explore
+ENABLE_GZIP         = false
+REDIRECT_OTHER_PORT = true
+PORT_TO_REDIRECT    = 80
+OFFLINE_MODE        = false
+ENABLE_PPROF        = false
+
+[database]
+DB_TYPE             = sqlite3
+PATH                = data/gitea.db
+
+[repository]
+ROOT                = %(APP_DATA_PATH)s/gitea-repositories
+
+[security]
+INSTALL_LOCK        = true
+SECRET_KEY          = 604d2fad965dcdc74c8c29659993a7ee488b384f89af47c2f48cc2c93b9500604ccdb58ab329d3823803ead13ebde546f577be5f5c4a66f2a39c8854e83a6f7a
+
+[service]
+REGISTER_EMAIL_CONFIRM = false
+ENABLE_NOTIFY_MAIL     = false
+DISABLE_REGISTRATION   = true
+REQUIRE_SIGNIN_VIEW    = false
+
+[mailer]
+ENABLED         = false
+
+[log]
+MODE            = console
+LEVEL           = info
+
+[session]
+; PROVIDER      = file
+PROVIDER        = db
+
+[picture]
+DISABLE_GRAVATAR        = true
+ENABLE_FEDERATED_AVATAR = false
+
+[mirror]
+DEFAULT_INTERVAL        = 24h
+
+[cron]
+ENABLED                 = true
+
+[cron.update_checker]
+RUN_AT_START            = true
+ENABLED                 = false
+
+[cron.repo_health_check]
+RUN_AT_START            = false
+ENABLED                 = false
+
+[attachment]
+; Dosya eklerini kapatmak I/O'yu azaltır.
+ENABLE                  = true
+ALLOWED_TYPES           = image/*, audio/*, video/*
+MAX_SIZE                = 50
+MAX_FILES               = 10
