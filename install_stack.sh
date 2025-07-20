@@ -160,7 +160,7 @@ if [ "$INSTALL_FORGEJO" = true ]; then
   mkdir /var/lib/forgejo
   chown git:git /var/lib/forgejo && chmod 750 /var/lib/forgejo
   mkdir /etc/forgejo
-  FORGEJO_SECRET_KEY=$(openssl rand -hex 64)
+  FORGEJO_SECRET_KEY=$(openssl rand -hex 64 | tr -d '\n')
   export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT FORGEJO_SECRET_KEY
   envsubst '${FORGEJO_DOMAIN} ${FORGEJO_LOOPBACK_PORT} ${FORGEJO_SECRET_KEY}' < ./forgejo/app.ini.template > "/etc/forgejo/app.ini"
   chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo && chown -R root:git /etc/forgejo
