@@ -141,8 +141,8 @@ fi
 if [ "$INSTALL_NGINX" = true ]; then
   log "Nginx installation started!" "info"
   apt install -y nginx python3-certbot-nginx
-  log "Nginx installation done!" "info"
   ./nginx_default.sh
+  log "Nginx installation done!" "info"
 fi
 
 if [ "$INSTALL_APACHE" = true ]; then
@@ -152,7 +152,6 @@ if [ "$INSTALL_APACHE" = true ]; then
 fi
 
 if [ "$INSTALL_FORGEJO" = true ]; then
-
   log "Forgejo installation started!" "info"
   FORGEJO_VERSION=curl -s https://codeberg.org/forgejo/forgejo/releases | grep -oP 'forgejo/releases/download/v\K[0-9.]+' | head -n1
   wget -O /usr/local/bin/forgejo "https://codeberg.org/forgejo/forgejo/releases/download/v${FORGEJO_VERSION}/forgejo-${FORGEJO_VERSION}-linux-amd64"
@@ -161,13 +160,13 @@ if [ "$INSTALL_FORGEJO" = true ]; then
   mkdir /var/lib/forgejo
   chown git:git /var/lib/forgejo && chmod 750 /var/lib/forgejo
   mkdir /etc/forgejo && chmod 750 /etc/forgejo
-  touch /etc/forgejo/app.ini && chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo && chown -R root:git /etc/forgejo
-
-  cp ./forgejo/app.ini /var/lib/forgejo/custom/conf/app.ini
   export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT
-  envsubst < ./forgejo/app.ini.template > "/var/lib/forgejo/custom/conf/app.ini"
+  envsubst < ./forgejo/app.ini.template > "/etc/forgejo/app.ini"
+  chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo && chown -R root:git /etc/forgejo
+  # cp ./forgejo/app.ini /var/lib/forgejo/custom/conf/app.ini
+  # envsubst < ./forgejo/app.ini.template > "/var/lib/forgejo/custom/conf/app.ini"
   wget -O /etc/systemd/system/forgejo.service https://codeberg.org/forgejo/forgejo/raw/branch/forgejo/contrib/systemd/forgejo.service
-  ./nginx_config_gen -p "http://127.0.0.1:${FORGEJO_LOOPBACK_PORT}" -d "${FORGEJO_DOMAIN}" -ws
+  ./nginx_config_gen.sh -p "http://127.0.0.1:${FORGEJO_LOOPBACK_PORT}" -d "${FORGEJO_DOMAIN}" -ws
   systemctl daemon-reload
   systemctl enable forgejo.service
   systemctl start forgejo.service
