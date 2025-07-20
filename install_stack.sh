@@ -153,7 +153,7 @@ fi
 
 if [ "$INSTALL_FORGEJO" = true ]; then
   log "Forgejo installation started!" "info"
-  FORGEJO_VERSION=curl -s https://codeberg.org/forgejo/forgejo/releases | grep -oP 'forgejo/releases/download/v\K[0-9.]+' | head -n1
+  FORGEJO_VERSION=$(curl -s https://codeberg.org/forgejo/forgejo/releases | grep -oP 'forgejo/releases/download/v\K[0-9.]+' | head -n1)
   wget -O /usr/local/bin/forgejo "https://codeberg.org/forgejo/forgejo/releases/download/v${FORGEJO_VERSION}/forgejo-${FORGEJO_VERSION}-linux-amd64"
   chmod 755 /usr/local/bin/forgejo
   id git &>/dev/null || adduser --system --shell /bin/bash --gecos 'Git Version Control' --group --disabled-password --home /home/git git 2>/dev/null || true
