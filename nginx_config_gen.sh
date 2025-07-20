@@ -58,18 +58,20 @@ else
 fi
 
 if [ "$WEBSOCKET_PASS" = true ]; then
-  WEBSOCKET_LINE=$'proxy_set_header Connection $http_connection;\nproxy_set_header Upgrade $http_upgrade;'
+  WEBSOCKET_LINE=\
+  "proxy_set_header Connection \$http_connection;
+  proxy_set_header Upgrade \$http_upgrade;"
 fi
 if [ "$SSL_DISABLED" = false ]; then
   LISTEN_LINE="listen 443 ssl;"
   SSL_LINES=\
-  $'ssl_certificate        /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;\n
-  ssl_certificate_key     /etc/letsencrypt/live/${DOMAIN}/privkey.pem;\n
-  include                 /etc/letsencrypt/options-ssl-nginx.conf;\n
-  ssl_dhparam             /etc/letsencrypt/ssl-dhparams.pem;\n
-  ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;\n
-  ssl_stapling on;\n
-  ssl_stapling_verify on;'
+  "ssl_certificate         /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+  ssl_certificate_key     /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+  include                 /etc/letsencrypt/options-ssl-nginx.conf;
+  ssl_dhparam             /etc/letsencrypt/ssl-dhparams.pem;
+  ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
+  ssl_stapling on;
+  ssl_stapling_verify on;"
 else
   LISTEN_LINE="listen 80;"
   SSL_LINES=""
