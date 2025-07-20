@@ -159,9 +159,10 @@ if [ "$INSTALL_FORGEJO" = true ]; then
   id git &>/dev/null || adduser --system --shell /bin/bash --gecos 'Git Version Control' --group --disabled-password --home /home/git git 2>/dev/null || true
   mkdir /var/lib/forgejo
   chown git:git /var/lib/forgejo && chmod 750 /var/lib/forgejo
-  mkdir /etc/forgejo && chmod 750 /etc/forgejo
-  export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT
-  envsubst < ./forgejo/app.ini.template > "/etc/forgejo/app.ini"
+  mkdir /etc/forgejo
+  FORGEJO_SECRET_KEY=$(openssl rand -hex 64)
+  export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT FORGEJO_SECRET_KEY
+  envsubst '${FORGEJO_DOMAIN} ${FORGEJO_LOOPBACK_PORT} ${FORGEJO_SECRET_KEY}' < ./forgejo/app.ini.template > "/etc/forgejo/app.ini"
   chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo && chown -R root:git /etc/forgejo
   # cp ./forgejo/app.ini /var/lib/forgejo/custom/conf/app.ini
   # envsubst < ./forgejo/app.ini.template > "/var/lib/forgejo/custom/conf/app.ini"

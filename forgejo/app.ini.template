@@ -24,8 +24,8 @@ PATH                = data/gitea.db
 ROOT                = %(APP_DATA_PATH)s/gitea-repositories
 
 [security]
-INSTALL_LOCK        = true
-SECRET_KEY          = 604d2fad965dcdc74c8c29659993a7ee488b384f89af47c2f48cc2c93b9500604ccdb58ab329d3823803ead13ebde546f577be5f5c4a66f2a39c8854e83a6f7a
+; INSTALL_LOCK        = true
+SECRET_KEY          = ${FORGEJO_SECRET_KEY}
 
 [service]
 REGISTER_EMAIL_CONFIRM = false
