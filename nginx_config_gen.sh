@@ -76,10 +76,10 @@ else
 fi
 export PROXY_PASS DOMAIN SERVER_NAME_LINE WEBSOCKET_LINE LISTEN_LINE SSL_LINES
 
-envsubst < ./nginx/site.template > "/etc/nginx/sites-available/${DOMAIN}.conf"
+envsubst '${LISTEN_LINE} ${SERVER_NAME_LINE} ${PROXY_PASS} ${WEBSOCKET_LINE} {SSL_LINES}'  < ./nginx/site.template > "/etc/nginx/sites-available/${DOMAIN}.conf"
 
 if [ "$WWW_REDIRECT" = true ]; then
-  envsubst < ./nginx/site_redirect.template >> "/etc/nginx/sites-available/${DOMAIN}.conf"
+  envsubst '${LISTEN_LINE} ${DOMAIN} {SSL_LINES}'  < ./nginx/site_redirect.template >> "/etc/nginx/sites-available/${DOMAIN}.conf"
 fi
 
 ln -s /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/
