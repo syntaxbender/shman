@@ -27,6 +27,13 @@ APP_DATA_PATH = /var/lib/forgejo/data
 [database]
 DB_TYPE             = sqlite3
 PATH                = data/gitea.db
+HOST = 
+NAME = 
+USER = 
+PASSWD = 
+SCHEMA = 
+SSL_MODE = disable
+LOG_SQL = false
 
 [repository]
 ROOT                = %(APP_DATA_PATH)s/gitea-repositories
