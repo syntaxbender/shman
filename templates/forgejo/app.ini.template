@@ -1,3 +1,9 @@
+APP_NAME      = SyntaxBender
+APP_SLOGAN    = Better Development Environments
+RUN_USER      = git
+WORK_PATH     = /var/lib/forgejo
+RUN_MODE      = prod
+
 [server]
 APP_NAME            = SyntaxBender Private Git Service
 PROTOCOL            = http
@@ -15,23 +21,38 @@ REDIRECT_OTHER_PORT = true
 PORT_TO_REDIRECT    = 80
 OFFLINE_MODE        = false
 ENABLE_PPROF        = false
+SSH_DOMAIN = git.example.com
+APP_DATA_PATH = /var/lib/forgejo/data
 
 [database]
 DB_TYPE             = sqlite3
 PATH                = data/gitea.db
+HOST = 
+NAME = 
+USER = 
+PASSWD = 
+SCHEMA = 
+SSL_MODE = disable
+LOG_SQL = false
 
 [repository]
 ROOT                = %(APP_DATA_PATH)s/gitea-repositories
 
 [security]
-; INSTALL_LOCK        = true
+INSTALL_LOCK        = true
 SECRET_KEY          = ${FORGEJO_SECRET_KEY}
+PASSWORD_HASH_ALGO = pbkdf2_hi
 
 [service]
 REGISTER_EMAIL_CONFIRM = false
 ENABLE_NOTIFY_MAIL     = false
 DISABLE_REGISTRATION   = true
 REQUIRE_SIGNIN_VIEW    = false
+DEFAULT_KEEP_EMAIL_PRIVATE = true
+ENABLE_CAPTCHA = false
+DEFAULT_ALLOW_CREATE_ORGANIZATION = false
+DEFAULT_ENABLE_TIMETRACKING = false
+NO_REPLY_ADDRESS = noreply.git.example.com
 
 [mailer]
 ENABLED         = false
@@ -39,10 +60,10 @@ ENABLED         = false
 [log]
 MODE            = console
 LEVEL           = info
+ROOT_PATH = /var/lib/forgejo/log
 
 [session]
-; PROVIDER      = file
-PROVIDER        = db
+PROVIDER      = file
 
 [picture]
 DISABLE_GRAVATAR        = true
@@ -55,7 +76,7 @@ DEFAULT_INTERVAL        = 24h
 ENABLED                 = true
 
 [cron.update_checker]
-RUN_AT_START            = true
+RUN_AT_START            = false
 ENABLED                 = false
 
 [cron.repo_health_check]
@@ -63,8 +84,20 @@ RUN_AT_START            = false
 ENABLED                 = false
 
 [attachment]
-; Dosya eklerini kapatmak I/O'yu azaltır.
 ENABLE                  = true
 ALLOWED_TYPES           = image/*, audio/*, video/*
 MAX_SIZE                = 50
 MAX_FILES               = 10
+
+[lfs]
+PATH = %(APP_DATA_PATH)s/data/lfs
+
+[openid]
+ENABLE_OPENID_SIGNIN = false
+ENABLE_OPENID_SIGNUP = false
+
+[repository.pull-request]
+DEFAULT_MERGE_STYLE = merge
+
+[repository.signing]
+DEFAULT_TRUST_MODEL = committer

@@ -49,6 +49,6 @@ ENV_FILE_LINE=""
 
 export USER EXEC_NPM DESC PORT_LINE ENV_FILE_LINE
 
-envsubst < ./systemd/service.template > "/etc/systemd/system/${SVC_NAME}.service"
+envsubst < ./templates/systemd/service.template > "/etc/systemd/system/${SVC_NAME}.service"
 
 echo "Service file created at /etc/systemd/system/${SVC_NAME}.service"

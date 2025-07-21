@@ -162,15 +162,16 @@ if [ "$INSTALL_FORGEJO" = true ]; then
   mkdir /etc/forgejo
   FORGEJO_SECRET_KEY=$(openssl rand -hex 64 | tr -d '\n')
   export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT FORGEJO_SECRET_KEY
-  envsubst '${FORGEJO_DOMAIN} ${FORGEJO_LOOPBACK_PORT} ${FORGEJO_SECRET_KEY}' < ./forgejo/app.ini.template > "/etc/forgejo/app.ini"
-  chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo && chown -R root:git /etc/forgejo
-  # cp ./forgejo/app.ini /var/lib/forgejo/custom/conf/app.ini
-  # envsubst < ./forgejo/app.ini.template > "/var/lib/forgejo/custom/conf/app.ini"
+  envsubst '${FORGEJO_DOMAIN} ${FORGEJO_LOOPBACK_PORT} ${FORGEJO_SECRET_KEY}' < ./templates/forgejo/app.ini.template > "/etc/forgejo/app.ini"
+  chown -R root:git /etc/forgejo
   wget -O /etc/systemd/system/forgejo.service https://codeberg.org/forgejo/forgejo/raw/branch/forgejo/contrib/systemd/forgejo.service
   ./nginx_config_gen.sh -p "http://127.0.0.1:${FORGEJO_LOOPBACK_PORT}" -d "${FORGEJO_DOMAIN}" -ws
   systemctl daemon-reload
   systemctl enable forgejo.service
   systemctl start forgejo.service
+  sleep 5
+  log "Waiting 5 seconds for run forgejo service..." "info"
+  chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo
   log "Forgejo installation done!" "info"
 fi
 
