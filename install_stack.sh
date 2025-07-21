@@ -169,8 +169,8 @@ if [ "$INSTALL_FORGEJO" = true ]; then
   systemctl daemon-reload
   systemctl enable forgejo.service
   systemctl start forgejo.service
-  sleep 5
   log "Waiting 5 seconds for run forgejo service..." "info"
+  sleep 5
   chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo
   log "Forgejo installation done!" "info"
 fi
