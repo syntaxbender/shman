@@ -163,7 +163,7 @@ if [ "$INSTALL_FORGEJO" = true ]; then
   FORGEJO_SECRET_KEY=$(openssl rand -hex 64 | tr -d '\n')
   export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT FORGEJO_SECRET_KEY
   envsubst '${FORGEJO_DOMAIN} ${FORGEJO_LOOPBACK_PORT} ${FORGEJO_SECRET_KEY}' < ./templates/forgejo/app.ini.template > "/etc/forgejo/app.ini"
-  chown -R root:git /etc/forgejo
+  chown -R root:git /etc/forgejo && chmod 660 /etc/forgejo/app.ini
   wget -O /etc/systemd/system/forgejo.service https://codeberg.org/forgejo/forgejo/raw/branch/forgejo/contrib/systemd/forgejo.service
   ./nginx_config_gen.sh -p "http://127.0.0.1:${FORGEJO_LOOPBACK_PORT}" -d "${FORGEJO_DOMAIN}" -ws
   systemctl daemon-reload
