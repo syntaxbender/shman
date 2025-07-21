@@ -14,7 +14,7 @@ DISABLE_SSH         = false
 SSH_PORT            = 22
 START_SSH_SERVER    = false
 LFS_START_SERVER    = true
-LFS_CONTENT_PATH    = data/lfs
+;LFS_CONTENT_PATH    = data/lfs
 LANDING_PAGE        = explore
 ENABLE_GZIP         = false
 REDIRECT_OTHER_PORT = true
@@ -27,13 +27,6 @@ APP_DATA_PATH = /var/lib/forgejo/data
 [database]
 DB_TYPE             = sqlite3
 PATH                = data/gitea.db
-HOST = 
-NAME = 
-USER = 
-PASSWD = 
-SCHEMA = 
-SSL_MODE = disable
-LOG_SQL = false
 
 [repository]
 ROOT                = %(APP_DATA_PATH)s/gitea-repositories
