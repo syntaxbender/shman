@@ -1,6 +1,6 @@
 read -p "Hangi kullanıcı için pool oluşturulsun? (örn: myuser): " USERNAME
 
-PHP_VERSIONS=($(ls /etc/php/ | grep -E '^[0-9]+\.[0-9]+$'))
+PHP_VERSIONS=$(ls /etc/php/ | grep -E '^[0-9]+\.[0-9]+$')
 
 if [ ${#PHP_VERSIONS[@]} -eq 0 ]; then
     echo "Hiçbir PHP sürümü bulunamadı."
