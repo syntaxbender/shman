@@ -1,3 +1,5 @@
+#!/bin/bash
+
 read -p "Hangi kullanıcı için pool oluşturulsun? (örn: myuser): " USERNAME
 
 PHP_VERSIONS=$(ls /etc/php/ | grep -E '^[0-9]+\.[0-9]+$')
