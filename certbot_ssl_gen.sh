@@ -77,6 +77,6 @@ combined_domains=($matched_value "${input_domains[@]}")
 sorted_combined=($(for d in "${combined_domains[@]}"; do echo "$d"; done | awk '{ print length, $0 }' | sort -n | cut -d' ' -f2-))
 
 PRIMARY_DOMAIN="${sorted_combined[0]}"
-DOMAINS="${sorted_combined[*]}"
+DOMAINS=$(IFS=','; echo "${sorted_combined[*]}")
 
 echo "certbot certonly -a $WEB_SERVER --agree-tos --no-eff-email --staple-ocsp --force-renewal --email info@$PRIMARY_DOMAIN -d $DOMAINS"
