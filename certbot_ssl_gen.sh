@@ -79,4 +79,4 @@ sorted_combined=($(for d in "${combined_domains[@]}"; do echo "$d"; done | awk '
 PRIMARY_DOMAIN="${sorted_combined[0]}"
 DOMAINS="${sorted_combined[*]}"
 
-certbot certonly -a $WEB_SERVER --agree-tos --no-eff-email --staple-ocsp --force-renewal --email info@$PRIMARY_DOMAIN -d $DOMAINS
+echo "certbot certonly -a $WEB_SERVER --agree-tos --no-eff-email --staple-ocsp --force-renewal --email info@$PRIMARY_DOMAIN -d $DOMAINS"
