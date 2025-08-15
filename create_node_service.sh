@@ -37,8 +37,8 @@ if [[
   -z "$SVC_NAME" || -z "$USER" || -z "$EXEC_NPM" || -z "$DESC" ||
   "$SVC_NAME" == -* || "$USER" == -* || "$EXEC_NPM" == -* || "$DESC" == -*
 ]]; then
-    echo "Error: --user, --exec-npm, --port, --description, --env-file args required."
-    echo "Usage: [...] --user username --exec-npm "run start" --description "prod service" [--port 3000] [--env-file]"
+    echo "Error: --user, --exec-npm, --description, --svc-name args required."
+    echo "Usage: [...] --user username --exec-npm \"run start\" --description \"prod service\" --svc-name \"service\" [--port 3000] [--env-file]"
     exit 1
 fi
 
