@@ -23,6 +23,7 @@ log() {
 
   echo -e "${color}${timestamp} - ${message}${endcolor}"
 }
+
 INSTALL_DEPENDENCIES=false
 INSTALL_POSTGRES=false
 INSTALL_MYSQL=false
@@ -147,7 +148,14 @@ fi
 
 if [ "$INSTALL_PODMAN" = true ]; then
   log "Podman dependencies installation started!" "info"
-  apt install -y podman uidmap slirp4netns passt fuse-overlayfs apparmor apparmor-utils
+  apt install -y podman uidmap slirp4netns fuse-overlayfs apparmor apparmor-utils
+
+  if apt-cache show passt >/dev/null 2>&1; then
+    apt install -y passt
+  else
+    log "passt package not found in repositories, skipping passt." "info"
+  fi
+
   needrestart -r a
   log "Podman dependencies installation done!" "info"
 fi
