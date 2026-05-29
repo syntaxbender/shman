@@ -29,6 +29,7 @@ INSTALL_MYSQL=false
 INSTALL_NGINX=false
 INSTALL_APACHE=false
 INSTALL_CERTBOT=false
+INSTALL_PODMAN=false
 INSTALL_PHP=false
 INSTALL_NODE=false
 INSTALL_FORGEJO=false
@@ -51,6 +52,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --apache)
       INSTALL_APACHE=true
+      ;;
+    --certbot)
+      INSTALL_CERTBOT=true
+      ;;
+    --podman)
+      INSTALL_PODMAN=true
       ;;
     --php)
       INSTALL_PHP=true
@@ -95,7 +102,7 @@ needrestart -r a
 if [ "$INSTALL_DEPENDENCIES" = true ]; then
   log "Dependency installations are started!" "info"
   apt upgrade -y
-  apt install -y curl wget gnupg2 gnupg net-tools dnsutils debconf-utils build-essential git git-lfs lsb-release ca-certificates software-properties-common openssl uuid-runtime certbot 
+  apt install -y curl wget gnupg2 gnupg net-tools dnsutils debconf-utils build-essential git git-lfs lsb-release ca-certificates software-properties-common openssl uuid-runtime
   needrestart -r a
   log "Dependency installations are done!" "info"
 fi
@@ -138,17 +145,40 @@ if [ "$INSTALL_PHP" = true ]; then
   log "PHP installation done!" "info"
 fi
 
+if [ "$INSTALL_PODMAN" = true ]; then
+  log "Podman dependencies installation started!" "info"
+  apt install -y podman uidmap slirp4netns passt fuse-overlayfs apparmor apparmor-utils
+  needrestart -r a
+  log "Podman dependencies installation done!" "info"
+fi
+
 if [ "$INSTALL_NGINX" = true ]; then
   log "Nginx installation started!" "info"
-  apt install -y nginx python3-certbot-nginx
+  apt install -y nginx
   ./nginx_default.sh
   log "Nginx installation done!" "info"
 fi
 
 if [ "$INSTALL_APACHE" = true ]; then
   log "Apache2 installation started!" "info"
-  apt install -y apache2 python3-certbot-apache
+  apt install -y apache2
   log "Apache2 installation done!" "info"
+fi
+
+if [ "$INSTALL_CERTBOT" = true ]; then
+  log "Certbot installation started!" "info"
+  apt install -y certbot
+
+  if [ "$INSTALL_NGINX" = true ]; then
+    apt install -y python3-certbot-nginx
+  fi
+
+  if [ "$INSTALL_APACHE" = true ]; then
+    apt install -y python3-certbot-apache
+  fi
+
+  needrestart -r a
+  log "Certbot installation done!" "info"
 fi
 
 if [ "$INSTALL_FORGEJO" = true ]; then
@@ -174,4 +204,3 @@ if [ "$INSTALL_FORGEJO" = true ]; then
   chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo
   log "Forgejo installation done!" "info"
 fi
-
