@@ -38,6 +38,8 @@ SERVER_USER="${SERVER_USER:-ubuntu}"
 read -rp "Server SSH port for scp [22]: " SERVER_SSH_PORT
 SERVER_SSH_PORT="${SERVER_SSH_PORT:-22}"
 
+read -rp "SSH private key path (boşsa default ssh config): " SSH_KEY_FILE
+
 read -rp "SPA UDP port for this server: " SPA_PORT
 [[ "$SPA_PORT" =~ ^[0-9]+$ ]] || die "SPA port numerik olmalı."
 
@@ -84,8 +86,16 @@ info "Client paketleri kuruluyor..."
 sudo apt update
 sudo apt install -y fwknop-client gnupg openssh-client
 
+SSH_OPTS=(-p "$SERVER_SSH_PORT")
+SCP_OPTS=(-P "$SERVER_SSH_PORT")
+if [[ -n "$SSH_KEY_FILE" ]]; then
+  [[ -f "$SSH_KEY_FILE" ]] || die "SSH private key bulunamadı: $SSH_KEY_FILE"
+  SSH_OPTS+=(-i "$SSH_KEY_FILE" -o IdentitiesOnly=yes)
+  SCP_OPTS+=(-i "$SSH_KEY_FILE" -o IdentitiesOnly=yes)
+fi
+
 info "Server kullanıcısının home dizini uzaktan okunuyor..."
-REMOTE_HOME="$(ssh -p "$SERVER_SSH_PORT" "$SERVER_USER@$SERVER_HOST" 'printf %s "$HOME"')"
+REMOTE_HOME="$(ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" 'printf %s "$HOME"')"
 [[ -n "$REMOTE_HOME" ]] || die "Remote home dizini okunamadı: $SERVER_USER@$SERVER_HOST"
 
 SERVER_PUB_REMOTE="$REMOTE_HOME/$SERVER_PUB_BASENAME"
@@ -99,8 +109,8 @@ echo "  HMAC remote: $HMAC_REMOTE"
 echo "  Client public key remote output: $CLIENT_PUB_REMOTE"
 
 info "Server public key ve profile bazlı HMAC key client'a çekiliyor..."
-scp -P "$SERVER_SSH_PORT" "$SERVER_USER@$SERVER_HOST:$SERVER_PUB_REMOTE" "$LOCAL_TMP/server-pub.asc"
-scp -P "$SERVER_SSH_PORT" "$SERVER_USER@$SERVER_HOST:$HMAC_REMOTE" "$LOCAL_TMP/hmac.key"
+scp "${SCP_OPTS[@]}" "$SERVER_USER@$SERVER_HOST:$SERVER_PUB_REMOTE" "$LOCAL_TMP/server-pub.asc"
+scp "${SCP_OPTS[@]}" "$SERVER_USER@$SERVER_HOST:$HMAC_REMOTE" "$LOCAL_TMP/hmac.key"
 chmod 600 "$LOCAL_TMP/hmac.key"
 
 info "Client GPG key oluşturuluyor. Expire yok."
@@ -130,7 +140,7 @@ info "Server public key ownertrust seviyesi ayarlanıyor (2 = I do NOT trust)...
 printf '%s:2:\n' "$SERVER_KEY_FPR" | gpg --import-ownertrust >/dev/null
 
 info "Client public key server'a gönderiliyor..."
-scp -P "$SERVER_SSH_PORT" "$LOCAL_TMP/client-pub.asc" "$SERVER_USER@$SERVER_HOST:$CLIENT_PUB_REMOTE"
+scp "${SCP_OPTS[@]}" "$LOCAL_TMP/client-pub.asc" "$SERVER_USER@$SERVER_HOST:$CLIENT_PUB_REMOTE"
 
 HMAC_KEY="$(cat "$LOCAL_TMP/hmac.key")"
 
