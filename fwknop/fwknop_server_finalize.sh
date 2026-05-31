@@ -5,7 +5,7 @@ info(){ echo -e "\n[INFO] $*"; }
 warn(){ echo -e "\n[WARN] $*"; }
 die(){ echo -e "\n[ERR] $*" >&2; exit 1; }
 
-[[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./server-finalize.sh"
+[[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./fwknop_server_finalize.sh"
 
 read -rp "Profile adı, örn mail-prod: " PROFILE
 [[ -n "$PROFILE" ]] || die "Profile boş olamaz."
@@ -46,7 +46,7 @@ chmod 700 "$ROOT_GPG_HOME"
 SERVER_KEY_ID="$(gpg --homedir "$ROOT_GPG_HOME" --list-secret-keys --with-colons "$SERVER_GPG_EMAIL" | awk -F: '/^sec:/ {print $5; exit}')"
 [[ -n "$SERVER_KEY_ID" ]] || die "Root keyring içinde server secret key bulunamadı: $SERVER_GPG_EMAIL
 
-Önce server-prepare adımını çalıştır veya key'i root keyring'e import et."
+Önce fwknop_server_prepare.sh adımını çalıştır veya key'i root keyring'e import et."
 
 info "Client public key ID okunuyor..."
 CLIENT_KEY_ID="$(gpg --homedir "$ROOT_GPG_HOME" --show-keys --with-colons "$CLIENT_PUB" | awk -F: '/^pub:/ {print $5; exit}')"
@@ -61,6 +61,17 @@ fi
 
 info "Client public key root GPG home'a import ediliyor..."
 gpg --homedir "$ROOT_GPG_HOME" --import "$CLIENT_PUB"
+
+info "Client public key server private key ile imzalanıyor..."
+gpg --homedir "$ROOT_GPG_HOME" --batch --yes --pinentry-mode loopback \
+  --passphrase "$SERVER_GPG_PASS" --local-user "$SERVER_KEY_ID" \
+  --quick-sign-key "$CLIENT_KEY_ID"
+
+CLIENT_KEY_FPR="$(gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-keys "$CLIENT_KEY_ID" | awk -F: '/^fpr:/ {print $10; exit}')"
+[[ -n "$CLIENT_KEY_FPR" ]] || die "Client public key fingerprint bulunamadı."
+
+info "Client public key ownertrust seviyesi ayarlanıyor (2 = I do NOT trust)..."
+printf '%s:2:\n' "$CLIENT_KEY_FPR" | gpg --homedir "$ROOT_GPG_HOME" --import-ownertrust >/dev/null
 
 if [[ -f /etc/fwknop/access.conf ]]; then
   warn "/etc/fwknop/access.conf zaten var."

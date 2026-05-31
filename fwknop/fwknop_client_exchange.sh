@@ -44,15 +44,9 @@ echo
 CLIENT_GPG_NAME="client-${PROFILE}"
 CLIENT_GPG_EMAIL="client-${PROFILE}@fwknop.local"
 
-SERVER_PUB_REMOTE="/home/$SERVER_USER/fwknop-${PROFILE}-server-pub.asc"
-HMAC_REMOTE="/home/$SERVER_USER/fwknop-${PROFILE}-hmac.key"
-CLIENT_PUB_REMOTE="/home/$SERVER_USER/fwknop-${PROFILE}-client-pub.asc"
-
-info "Türetilen değerler:"
-echo "  Client GPG UID: $CLIENT_GPG_NAME <$CLIENT_GPG_EMAIL>"
-echo "  Server public key remote: $SERVER_PUB_REMOTE"
-echo "  HMAC remote: $HMAC_REMOTE"
-echo "  Client public key remote output: $CLIENT_PUB_REMOTE"
+SERVER_PUB_BASENAME="fwknop-${PROFILE}-server-pub.asc"
+HMAC_BASENAME="fwknop-${PROFILE}-hmac.key"
+CLIENT_PUB_BASENAME="fwknop-${PROFILE}-client-pub.asc"
 
 if gpg --list-secret-keys "$CLIENT_GPG_EMAIL" >/dev/null 2>&1; then
   die "Bu profile için client secret key zaten var: $CLIENT_GPG_EMAIL"
@@ -64,6 +58,20 @@ trap 'rm -rf "$LOCAL_TMP"' EXIT
 info "Client paketleri kuruluyor..."
 sudo apt update
 sudo apt install -y fwknop-client gnupg openssh-client
+
+info "Server kullanıcısının home dizini uzaktan okunuyor..."
+REMOTE_HOME="$(ssh -p "$SERVER_SSH_PORT" "$SERVER_USER@$SERVER_HOST" 'printf %s "$HOME"')"
+[[ -n "$REMOTE_HOME" ]] || die "Remote home dizini okunamadı: $SERVER_USER@$SERVER_HOST"
+
+SERVER_PUB_REMOTE="$REMOTE_HOME/$SERVER_PUB_BASENAME"
+HMAC_REMOTE="$REMOTE_HOME/$HMAC_BASENAME"
+CLIENT_PUB_REMOTE="$REMOTE_HOME/$CLIENT_PUB_BASENAME"
+
+info "Türetilen değerler:"
+echo "  Client GPG UID: $CLIENT_GPG_NAME <$CLIENT_GPG_EMAIL>"
+echo "  Server public key remote: $SERVER_PUB_REMOTE"
+echo "  HMAC remote: $HMAC_REMOTE"
+echo "  Client public key remote output: $CLIENT_PUB_REMOTE"
 
 info "Server public key ve profile bazlı HMAC key client'a çekiliyor..."
 scp -P "$SERVER_SSH_PORT" "$SERVER_USER@$SERVER_HOST:$SERVER_PUB_REMOTE" "$LOCAL_TMP/server-pub.asc"
@@ -85,6 +93,16 @@ gpg --import "$LOCAL_TMP/server-pub.asc"
 
 SERVER_KEY_ID="$(gpg --show-keys --with-colons "$LOCAL_TMP/server-pub.asc" | awk -F: '/^pub:/ {print $5; exit}')"
 [[ -n "$SERVER_KEY_ID" ]] || die "Server public key ID bulunamadı."
+
+info "Server public key client private key ile imzalanıyor..."
+gpg --batch --yes --pinentry-mode loopback --passphrase "$CLIENT_GPG_PASS" \
+  --local-user "$CLIENT_KEY_ID" --quick-sign-key "$SERVER_KEY_ID"
+
+SERVER_KEY_FPR="$(gpg --with-colons --list-keys "$SERVER_KEY_ID" | awk -F: '/^fpr:/ {print $10; exit}')"
+[[ -n "$SERVER_KEY_FPR" ]] || die "Server public key fingerprint bulunamadı."
+
+info "Server public key ownertrust seviyesi ayarlanıyor (2 = I do NOT trust)..."
+printf '%s:2:\n' "$SERVER_KEY_FPR" | gpg --import-ownertrust >/dev/null
 
 info "Client public key server'a gönderiliyor..."
 scp -P "$SERVER_SSH_PORT" "$LOCAL_TMP/client-pub.asc" "$SERVER_USER@$SERVER_HOST:$CLIENT_PUB_REMOTE"
@@ -138,7 +156,7 @@ Client public key server'a gönderildi:
   $CLIENT_PUB_REMOTE
 
 Sonraki adım server tarafında:
-  sudo ./server-finalize.sh
+  sudo ./fwknop_server_finalize.sh
 
 Finalize sırasında aynı profile adını ve SPA portunu gir.
 

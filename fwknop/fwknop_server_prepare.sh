@@ -5,7 +5,7 @@ info(){ echo -e "\n[INFO] $*"; }
 warn(){ echo -e "\n[WARN] $*"; }
 die(){ echo -e "\n[ERR] $*" >&2; exit 1; }
 
-[[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./server-prepare.sh"
+[[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./fwknop_server_prepare.sh"
 
 read -rp "Profile adı, örn mail-prod: " PROFILE
 [[ -n "$PROFILE" ]] || die "Profile boş olamaz."
@@ -108,7 +108,7 @@ HMAC key:
   $HMAC_FILE
 
 Sonraki adım client tarafında:
-  ./client-exchange.sh
+  ./fwknop_client_exchange.sh
 
 Client exchange sırasında aynı profile adını kullan.
 SPA portu script üretmez; sen elle belirleyip firewall'da açmalısın.
