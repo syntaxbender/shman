@@ -13,9 +13,6 @@ read -rp "Profile adı, örn mail-prod: " PROFILE
 read -rp "Server SSH kullanıcısı [${SUDO_USER:-ubuntu}]: " SERVER_USER
 SERVER_USER="${SERVER_USER:-${SUDO_USER:-ubuntu}}"
 
-read -rp "Network interface for fwknopd.conf [ens3]: " PCAP_INTF
-PCAP_INTF="${PCAP_INTF:-ens3}"
-
 read -rsp "Server GPG passphrase (boş olabilir): " SERVER_GPG_PASS
 echo
 
@@ -117,7 +114,6 @@ chmod 600 "$HMAC_FILE"
 
 info "/etc/fwknop/fwknopd.conf yazılıyor..."
 cat >/etc/fwknop/fwknopd.conf <<EOF
-PCAP_INTF                   $PCAP_INTF;
 ENABLE_SPA_PACKET_AGING      Y;
 MAX_SPA_PACKET_AGE           60;
 EOF
