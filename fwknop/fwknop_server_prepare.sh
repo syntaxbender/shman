@@ -75,9 +75,30 @@ ufw disable || true
 info "iptables/IPv6 yönetimi yapılmıyor."
 info "Firewall kuralları bu script tarafından oluşturulmaz."
 
-info "Server GPG key root keyring altında oluşturuluyor. Expire yok."
-gpg --homedir "$ROOT_GPG_HOME" --batch --pinentry-mode loopback --passphrase "$SERVER_GPG_PASS" \
-  --quick-generate-key "$SERVER_GPG_NAME <$SERVER_GPG_EMAIL>" rsa2048 sign 0
+info "Server GPG key root keyring altında oluşturuluyor (RSA/RSA 2048, 1y)."
+SERVER_KEY_SPEC_FILE="$(mktemp)"
+cat > "$SERVER_KEY_SPEC_FILE" <<EOF
+Key-Type: RSA
+Key-Length: 2048
+Subkey-Type: RSA
+Subkey-Length: 2048
+Name-Real: $SERVER_GPG_NAME
+Name-Email: $SERVER_GPG_EMAIL
+Expire-Date: 1y
+EOF
+if [[ -z "$SERVER_GPG_PASS" ]]; then
+  echo "%no-protection" >> "$SERVER_KEY_SPEC_FILE"
+fi
+echo "%commit" >> "$SERVER_KEY_SPEC_FILE"
+
+if [[ -n "$SERVER_GPG_PASS" ]]; then
+  gpg --homedir "$ROOT_GPG_HOME" --batch --pinentry-mode loopback --passphrase "$SERVER_GPG_PASS" \
+    --generate-key "$SERVER_KEY_SPEC_FILE"
+else
+  gpg --homedir "$ROOT_GPG_HOME" --batch --pinentry-mode loopback \
+    --generate-key "$SERVER_KEY_SPEC_FILE"
+fi
+rm -f "$SERVER_KEY_SPEC_FILE"
 
 SERVER_KEY_ID="$(gpg --homedir "$ROOT_GPG_HOME" --list-secret-keys --with-colons "$SERVER_GPG_EMAIL" | awk -F: '/^sec:/ {print $5; exit}')"
 [[ -n "$SERVER_KEY_ID" ]] || die "Server GPG key ID bulunamadı."

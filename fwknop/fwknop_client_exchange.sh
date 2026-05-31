@@ -113,9 +113,30 @@ scp "${SCP_OPTS[@]}" "$SERVER_USER@$SERVER_HOST:$SERVER_PUB_REMOTE" "$LOCAL_TMP/
 scp "${SCP_OPTS[@]}" "$SERVER_USER@$SERVER_HOST:$HMAC_REMOTE" "$LOCAL_TMP/hmac.key"
 chmod 600 "$LOCAL_TMP/hmac.key"
 
-info "Client GPG key oluşturuluyor. Expire yok."
-gpg --batch --pinentry-mode loopback --passphrase "$CLIENT_GPG_PASS" \
-  --quick-generate-key "$CLIENT_GPG_NAME <$CLIENT_GPG_EMAIL>" rsa2048 sign 0
+info "Client GPG key oluşturuluyor (RSA/RSA 2048, 1y)."
+CLIENT_KEY_SPEC_FILE="$(mktemp)"
+cat > "$CLIENT_KEY_SPEC_FILE" <<EOF
+Key-Type: RSA
+Key-Length: 2048
+Subkey-Type: RSA
+Subkey-Length: 2048
+Name-Real: $CLIENT_GPG_NAME
+Name-Email: $CLIENT_GPG_EMAIL
+Expire-Date: 1y
+EOF
+if [[ -z "$CLIENT_GPG_PASS" ]]; then
+  echo "%no-protection" >> "$CLIENT_KEY_SPEC_FILE"
+fi
+echo "%commit" >> "$CLIENT_KEY_SPEC_FILE"
+
+if [[ -n "$CLIENT_GPG_PASS" ]]; then
+  gpg --batch --pinentry-mode loopback --passphrase "$CLIENT_GPG_PASS" \
+    --generate-key "$CLIENT_KEY_SPEC_FILE"
+else
+  gpg --batch --pinentry-mode loopback \
+    --generate-key "$CLIENT_KEY_SPEC_FILE"
+fi
+rm -f "$CLIENT_KEY_SPEC_FILE"
 
 CLIENT_KEY_ID="$(gpg --list-secret-keys --with-colons "$CLIENT_GPG_EMAIL" | awk -F: '/^sec:/ {print $5; exit}')"
 [[ -n "$CLIENT_KEY_ID" ]] || die "Client GPG key ID bulunamadı."
