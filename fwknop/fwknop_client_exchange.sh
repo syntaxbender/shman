@@ -56,7 +56,7 @@ HMAC_BASENAME="fwknop-${PROFILE}-hmac.key"
 CLIENT_PUB_BASENAME="fwknop-${PROFILE}-client-pub.asc"
 
 PROFILE_EXISTS=""
-EXISTING_CLIENT_KEY_FPR="$(gpg --with-colons --list-secret-keys "$CLIENT_GPG_EMAIL" | awk -F: '/^fpr:/ {print $10; exit}')"
+EXISTING_CLIENT_KEY_FPR="$(gpg --with-colons --list-secret-keys "$CLIENT_GPG_EMAIL" 2>/dev/null | awk -F: '/^fpr:/ {print $10; exit}' || true)"
 CLIENT_KEY_EXISTS=""
 
 profile_exists_in_fwknoprc "$PROFILE" && PROFILE_EXISTS="yes"
