@@ -129,12 +129,12 @@ gpg --import "$LOCAL_TMP/server-pub.asc"
 SERVER_KEY_ID="$(gpg --show-keys --with-colons "$LOCAL_TMP/server-pub.asc" | awk -F: '/^pub:/ {print $5; exit}')"
 [[ -n "$SERVER_KEY_ID" ]] || die "Server public key ID bulunamadı."
 
-info "Server public key client private key ile imzalanıyor..."
-gpg --batch --yes --pinentry-mode loopback --passphrase "$CLIENT_GPG_PASS" \
-  --local-user "$CLIENT_KEY_ID" --quick-sign-key "$SERVER_KEY_ID"
-
 SERVER_KEY_FPR="$(gpg --with-colons --list-keys "$SERVER_KEY_ID" | awk -F: '/^fpr:/ {print $10; exit}')"
 [[ -n "$SERVER_KEY_FPR" ]] || die "Server public key fingerprint bulunamadı."
+
+info "Server public key client private key ile imzalanıyor..."
+gpg --batch --yes --pinentry-mode loopback --passphrase "$CLIENT_GPG_PASS" \
+  --local-user "$CLIENT_KEY_ID" --quick-sign-key "$SERVER_KEY_FPR"
 
 info "Server public key ownertrust seviyesi ayarlanıyor (2 = I do NOT trust)..."
 printf '%s:2:\n' "$SERVER_KEY_FPR" | gpg --import-ownertrust >/dev/null

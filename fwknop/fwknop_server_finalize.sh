@@ -65,13 +65,13 @@ fi
 info "Client public key root GPG home'a import ediliyor..."
 gpg --homedir "$ROOT_GPG_HOME" --import "$CLIENT_PUB"
 
+CLIENT_KEY_FPR="$(gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-keys "$CLIENT_KEY_ID" | awk -F: '/^fpr:/ {print $10; exit}')"
+[[ -n "$CLIENT_KEY_FPR" ]] || die "Client public key fingerprint bulunamadı."
+
 info "Client public key server private key ile imzalanıyor..."
 gpg --homedir "$ROOT_GPG_HOME" --batch --yes --pinentry-mode loopback \
   --passphrase "$SERVER_GPG_PASS" --local-user "$SERVER_KEY_ID" \
-  --quick-sign-key "$CLIENT_KEY_ID"
-
-CLIENT_KEY_FPR="$(gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-keys "$CLIENT_KEY_ID" | awk -F: '/^fpr:/ {print $10; exit}')"
-[[ -n "$CLIENT_KEY_FPR" ]] || die "Client public key fingerprint bulunamadı."
+  --quick-sign-key "$CLIENT_KEY_FPR"
 
 info "Client public key ownertrust seviyesi ayarlanıyor (2 = I do NOT trust)..."
 printf '%s:2:\n' "$CLIENT_KEY_FPR" | gpg --homedir "$ROOT_GPG_HOME" --import-ownertrust >/dev/null
