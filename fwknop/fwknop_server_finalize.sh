@@ -21,9 +21,8 @@ read -rp "fwknop UDP port [62201]: " SPA_PORT
 SPA_PORT="${SPA_PORT:-62201}"
 [[ "$SPA_PORT" =~ ^[0-9]+$ ]] || die "SPA port numerik olmalı."
 
-read -rsp "Server GPG passphrase: " SERVER_GPG_PASS
+read -rsp "Server GPG passphrase (boş olabilir): " SERVER_GPG_PASS
 echo
-[[ -n "$SERVER_GPG_PASS" ]] || die "Passphrase boş olamaz."
 
 ROOT_GPG_HOME="/root/.gnupg"
 SERVER_HOME="$(eval echo "~$SERVER_USER")"
@@ -82,6 +81,12 @@ fi
 
 HMAC_KEY="$(cat "$HMAC_FILE")"
 
+if [[ -n "$SERVER_GPG_PASS" ]]; then
+  SERVER_GPG_PW_CFG="GPG_DECRYPT_PW              $SERVER_GPG_PASS"
+else
+  SERVER_GPG_PW_CFG="GPG_ALLOW_NO_PW             Y"
+fi
+
 info "/etc/fwknop/access.conf yazılıyor..."
 cat >/etc/fwknop/access.conf <<EOF
 SOURCE                      ANY
@@ -90,7 +95,7 @@ REQUIRE_SOURCE_ADDRESS      Y
 
 GPG_HOME_DIR                /root/.gnupg
 GPG_DECRYPT_ID              $SERVER_KEY_ID
-GPG_DECRYPT_PW              $SERVER_GPG_PASS
+$SERVER_GPG_PW_CFG
 GPG_REQUIRE_SIG             Y
 GPG_IGNORE_SIG_VERIFY_ERROR N
 GPG_REMOTE_ID               $CLIENT_KEY_ID

@@ -16,9 +16,8 @@ SERVER_USER="${SERVER_USER:-${SUDO_USER:-ubuntu}}"
 read -rp "Network interface for fwknopd.conf [ens3]: " PCAP_INTF
 PCAP_INTF="${PCAP_INTF:-ens3}"
 
-read -rsp "Server GPG passphrase: " SERVER_GPG_PASS
+read -rsp "Server GPG passphrase (boş olabilir): " SERVER_GPG_PASS
 echo
-[[ -n "$SERVER_GPG_PASS" ]] || die "Passphrase boş olamaz."
 
 ROOT_GPG_HOME="/root/.gnupg"
 SERVER_HOME="$(eval echo "~$SERVER_USER")"

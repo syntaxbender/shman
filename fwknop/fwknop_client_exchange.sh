@@ -37,9 +37,8 @@ read -rp "SSH access port to open via fwknop [22]: " SSH_ACCESS_PORT
 SSH_ACCESS_PORT="${SSH_ACCESS_PORT:-22}"
 [[ "$SSH_ACCESS_PORT" =~ ^[0-9]+$ ]] || die "SSH access port numerik olmalı."
 
-read -rsp "Client GPG passphrase for this profile: " CLIENT_GPG_PASS
+read -rsp "Client GPG passphrase for this profile (boş olabilir): " CLIENT_GPG_PASS
 echo
-[[ -n "$CLIENT_GPG_PASS" ]] || die "Passphrase boş olamaz."
 
 CLIENT_GPG_NAME="client-${PROFILE}"
 CLIENT_GPG_EMAIL="client-${PROFILE}@fwknop.local"
@@ -109,6 +108,12 @@ scp -P "$SERVER_SSH_PORT" "$LOCAL_TMP/client-pub.asc" "$SERVER_USER@$SERVER_HOST
 
 HMAC_KEY="$(cat "$LOCAL_TMP/hmac.key")"
 
+if [[ -n "$CLIENT_GPG_PASS" ]]; then
+  CLIENT_GPG_PW_CFG="GPG_SIGNING_PW              $CLIENT_GPG_PASS"
+else
+  CLIENT_GPG_PW_CFG=""
+fi
+
 info "~/.fwknoprc içine yeni profile append ediliyor..."
 cat >> "$HOME/.fwknoprc" <<EOF
 
@@ -122,7 +127,7 @@ ALLOW_IP                    resolve
 USE_GPG                     Y
 GPG_RECIPIENT               $SERVER_KEY_ID
 GPG_SIGNER                  $CLIENT_KEY_ID
-GPG_SIGNING_PW              $CLIENT_GPG_PASS
+$CLIENT_GPG_PW_CFG
 
 USE_HMAC                    Y
 HMAC_KEY_BASE64             $HMAC_KEY
