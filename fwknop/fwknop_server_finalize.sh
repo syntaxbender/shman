@@ -52,10 +52,14 @@ CLIENT_KEY_ID="$(gpg --homedir "$ROOT_GPG_HOME" --show-keys --with-colons "$CLIE
 [[ -n "$CLIENT_KEY_ID" ]] || die "Client public key ID bulunamadı."
 
 if gpg --homedir "$ROOT_GPG_HOME" --list-keys "$CLIENT_KEY_ID" >/dev/null 2>&1; then
-  die "Root GPG keyring içinde bu client public key zaten var: $CLIENT_KEY_ID
+  warn "Root GPG keyring içinde bu client public key zaten var: $CLIENT_KEY_ID"
+  read -rp "Overwrite edilsin mi? [y/N]: " OVERWRITE_CLIENT_KEY
+  OVERWRITE_CLIENT_KEY="${OVERWRITE_CLIENT_KEY:-N}"
+  [[ "$OVERWRITE_CLIENT_KEY" =~ ^[Yy]$ ]] || die "Kullanıcı iptal etti. Client key overwrite edilmedi."
 
-Overwrite/import tekrar yapılmaz.
-Muhtemelen finalize daha önce çalıştırıldı veya aynı key mevcut."
+  EXISTING_CLIENT_KEY_FPR="$(gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-keys "$CLIENT_KEY_ID" | awk -F: '/^fpr:/ {print $10; exit}')"
+  [[ -n "$EXISTING_CLIENT_KEY_FPR" ]] || die "Mevcut client key fingerprint bulunamadı."
+  gpg --homedir "$ROOT_GPG_HOME" --batch --yes --delete-secret-and-public-key "$EXISTING_CLIENT_KEY_FPR"
 fi
 
 info "Client public key root GPG home'a import ediliyor..."

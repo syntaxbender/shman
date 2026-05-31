@@ -39,16 +39,30 @@ info "Çakışma kontrolleri yapılıyor..."
 mkdir -p "$ROOT_GPG_HOME"
 chmod 700 "$ROOT_GPG_HOME"
 
-if gpg --homedir "$ROOT_GPG_HOME" --list-secret-keys "$SERVER_GPG_EMAIL" >/dev/null 2>&1; then
-  die "Bu profile için server secret key zaten var: $SERVER_GPG_EMAIL"
-fi
+EXISTING_SERVER_KEY_FPR="$(gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-secret-keys "$SERVER_GPG_EMAIL" | awk -F: '/^fpr:/ {print $10; exit}')"
+SERVER_KEY_EXISTS=""
+SERVER_PUB_EXISTS=""
+HMAC_EXISTS=""
 
-if [[ -e "$SERVER_PUB_OUT" ]]; then
-  die "Server public key dosyası zaten var: $SERVER_PUB_OUT"
-fi
+[[ -n "$EXISTING_SERVER_KEY_FPR" ]] && SERVER_KEY_EXISTS="yes"
+[[ -e "$SERVER_PUB_OUT" ]] && SERVER_PUB_EXISTS="yes"
+[[ -e "$HMAC_FILE" ]] && HMAC_EXISTS="yes"
 
-if [[ -e "$HMAC_FILE" ]]; then
-  die "HMAC key dosyası zaten var: $HMAC_FILE"
+if [[ -n "$SERVER_KEY_EXISTS" || -n "$SERVER_PUB_EXISTS" || -n "$HMAC_EXISTS" ]]; then
+  warn "Bu profile ait mevcut key/dosyalar bulundu."
+  [[ -n "$SERVER_KEY_EXISTS" ]] && echo "  - Server secret key: $SERVER_GPG_EMAIL"
+  [[ -n "$SERVER_PUB_EXISTS" ]] && echo "  - Server public key dosyası: $SERVER_PUB_OUT"
+  [[ -n "$HMAC_EXISTS" ]] && echo "  - HMAC dosyası: $HMAC_FILE"
+  echo
+  read -rp "Overwrite edilsin mi? [y/N]: " OVERWRITE_PREPARE
+  OVERWRITE_PREPARE="${OVERWRITE_PREPARE:-N}"
+  [[ "$OVERWRITE_PREPARE" =~ ^[Yy]$ ]] || die "Kullanıcı iptal etti. Overwrite yapılmadı."
+
+  if [[ -n "$SERVER_KEY_EXISTS" ]]; then
+    gpg --homedir "$ROOT_GPG_HOME" --batch --yes --delete-secret-and-public-key "$EXISTING_SERVER_KEY_FPR"
+  fi
+  [[ -n "$SERVER_PUB_EXISTS" ]] && rm -f "$SERVER_PUB_OUT"
+  [[ -n "$HMAC_EXISTS" ]] && rm -f "$HMAC_FILE"
 fi
 
 info "Paketler kuruluyor..."

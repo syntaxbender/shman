@@ -11,15 +11,23 @@ profile_exists_in_fwknoprc() {
   grep -Fxq "[$profile]" "$HOME/.fwknoprc"
 }
 
+remove_profile_from_fwknoprc() {
+  local profile="$1"
+  local fwknoprc="$HOME/.fwknoprc"
+  local tmp_file
+  [[ -f "$fwknoprc" ]] || return 0
+
+  tmp_file="$(mktemp)"
+  awk -v section="[$profile]" '
+    $0 == section {skip=1; next}
+    /^\[/ {skip=0}
+    !skip {print}
+  ' "$fwknoprc" > "$tmp_file"
+  mv "$tmp_file" "$fwknoprc"
+}
+
 read -rp "Profile adı, örn mail-prod: " PROFILE
 [[ -n "$PROFILE" ]] || die "Profile boş olamaz."
-
-if profile_exists_in_fwknoprc "$PROFILE"; then
-  die "~/.fwknoprc içinde bu profile zaten var: [$PROFILE]
-
-Overwrite yapılmaz.
-Mevcut bloğu manuel sil veya farklı profile adı kullan."
-fi
 
 read -rp "Server host/domain/IP: " SERVER_HOST
 [[ -n "$SERVER_HOST" ]] || die "Server host boş olamaz."
@@ -47,8 +55,26 @@ SERVER_PUB_BASENAME="fwknop-${PROFILE}-server-pub.asc"
 HMAC_BASENAME="fwknop-${PROFILE}-hmac.key"
 CLIENT_PUB_BASENAME="fwknop-${PROFILE}-client-pub.asc"
 
-if gpg --list-secret-keys "$CLIENT_GPG_EMAIL" >/dev/null 2>&1; then
-  die "Bu profile için client secret key zaten var: $CLIENT_GPG_EMAIL"
+PROFILE_EXISTS=""
+EXISTING_CLIENT_KEY_FPR="$(gpg --with-colons --list-secret-keys "$CLIENT_GPG_EMAIL" | awk -F: '/^fpr:/ {print $10; exit}')"
+CLIENT_KEY_EXISTS=""
+
+profile_exists_in_fwknoprc "$PROFILE" && PROFILE_EXISTS="yes"
+[[ -n "$EXISTING_CLIENT_KEY_FPR" ]] && CLIENT_KEY_EXISTS="yes"
+
+if [[ -n "$PROFILE_EXISTS" || -n "$CLIENT_KEY_EXISTS" ]]; then
+  warn "Bu profile ait mevcut kayıtlar bulundu."
+  [[ -n "$PROFILE_EXISTS" ]] && echo "  - ~/.fwknoprc içinde profile bloğu: [$PROFILE]"
+  [[ -n "$CLIENT_KEY_EXISTS" ]] && echo "  - Client secret key: $CLIENT_GPG_EMAIL"
+  echo
+  read -rp "Overwrite edilsin mi? [y/N]: " OVERWRITE_EXCHANGE
+  OVERWRITE_EXCHANGE="${OVERWRITE_EXCHANGE:-N}"
+  [[ "$OVERWRITE_EXCHANGE" =~ ^[Yy]$ ]] || die "Kullanıcı iptal etti. Overwrite yapılmadı."
+
+  [[ -n "$PROFILE_EXISTS" ]] && remove_profile_from_fwknoprc "$PROFILE"
+  if [[ -n "$CLIENT_KEY_EXISTS" ]]; then
+    gpg --batch --yes --delete-secret-and-public-key "$EXISTING_CLIENT_KEY_FPR"
+  fi
 fi
 
 LOCAL_TMP="$(mktemp -d)"
