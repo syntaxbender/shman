@@ -88,7 +88,9 @@ chown "$SERVER_USER:$SERVER_USER" "$SERVER_PUB_OUT"
 chmod 644 "$SERVER_PUB_OUT"
 
 info "Profile bazlı HMAC key üretiliyor..."
-openssl rand -base64 64 > "$HMAC_FILE"
+HMAC_KEY="$(openssl rand -base64 64 | tr -d '\r\n')"
+[[ -n "$HMAC_KEY" ]] || die "HMAC key üretilemedi."
+printf '%s' "$HMAC_KEY" > "$HMAC_FILE"
 chown "$SERVER_USER:$SERVER_USER" "$HMAC_FILE"
 chmod 600 "$HMAC_FILE"
 

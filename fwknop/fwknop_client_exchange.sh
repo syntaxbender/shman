@@ -142,7 +142,8 @@ printf '%s:2:\n' "$SERVER_KEY_FPR" | gpg --import-ownertrust >/dev/null
 info "Client public key server'a gönderiliyor..."
 scp "${SCP_OPTS[@]}" "$LOCAL_TMP/client-pub.asc" "$SERVER_USER@$SERVER_HOST:$CLIENT_PUB_REMOTE"
 
-HMAC_KEY="$(cat "$LOCAL_TMP/hmac.key")"
+HMAC_KEY="$(tr -d '\r\n' < "$LOCAL_TMP/hmac.key")"
+[[ -n "$HMAC_KEY" ]] || die "HMAC key okunamadı."
 
 if [[ -n "$CLIENT_GPG_PASS" ]]; then
   CLIENT_GPG_PW_CFG="GPG_SIGNING_PW              $CLIENT_GPG_PASS"

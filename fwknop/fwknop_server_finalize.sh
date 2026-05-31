@@ -83,7 +83,8 @@ if [[ -f /etc/fwknop/access.conf ]]; then
   [[ "$OVERWRITE_ACCESS" =~ ^[Yy]$ ]] || die "access.conf overwrite edilmedi."
 fi
 
-HMAC_KEY="$(cat "$HMAC_FILE")"
+HMAC_KEY="$(tr -d '\r\n' < "$HMAC_FILE")"
+[[ -n "$HMAC_KEY" ]] || die "HMAC key okunamadı."
 
 if [[ -n "$SERVER_GPG_PASS" ]]; then
   SERVER_GPG_PW_CFG="GPG_DECRYPT_PW              $SERVER_GPG_PASS"
