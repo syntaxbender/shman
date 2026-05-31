@@ -112,12 +112,6 @@ printf '%s' "$HMAC_KEY" > "$HMAC_FILE"
 chown "$SERVER_USER:$SERVER_USER" "$HMAC_FILE"
 chmod 600 "$HMAC_FILE"
 
-info "/etc/fwknop/fwknopd.conf yazılıyor..."
-cat >/etc/fwknop/fwknopd.conf <<EOF
-ENABLE_SPA_PACKET_AGING      Y;
-MAX_SPA_PACKET_AGE           60;
-EOF
-
 cat <<EOF
 
 ========================================
@@ -143,6 +137,6 @@ Sonraki adım client tarafında:
   ./fwknop_client_exchange.sh
 
 Client exchange sırasında aynı profile adını kullan.
-SPA portu script üretmez; sen elle belirleyip firewall'da açmalısın.
+Server finalize adımında interface ve SPA port bilgisi istenecek.
 
 EOF

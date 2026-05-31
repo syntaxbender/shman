@@ -5,6 +5,18 @@ info(){ echo -e "\n[INFO] $*"; }
 warn(){ echo -e "\n[WARN] $*"; }
 die(){ echo -e "\n[ERR] $*" >&2; exit 1; }
 
+upsert_conf_line() {
+  local conf_file="$1"
+  local key="$2"
+  local line="$3"
+
+  if grep -Eq "^[[:space:]]*${key}[[:space:]]+" "$conf_file"; then
+    sed -i -E "s|^[[:space:]]*${key}[[:space:]].*|${line}|" "$conf_file"
+  else
+    printf '%s\n' "$line" >> "$conf_file"
+  fi
+}
+
 [[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./fwknop_server_finalize.sh"
 
 read -rp "Profile adı, örn mail-prod: " PROFILE
@@ -16,6 +28,9 @@ SERVER_USER="${SERVER_USER:-${SUDO_USER:-ubuntu}}"
 read -rp "Açılıp kapatılacak olan SSH portu [22]: " SSH_PORT
 SSH_PORT="${SSH_PORT:-22}"
 [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || die "SSH port numerik olmalı."
+
+read -rp "Network interface for fwknopd.conf [ens0]: " PCAP_INTF
+PCAP_INTF="${PCAP_INTF:-ens0}"
 
 read -rp "fwknop UDP port [62201]: " SPA_PORT
 SPA_PORT="${SPA_PORT:-62201}"
@@ -34,6 +49,8 @@ info "Türetilen değerler:"
 echo "  Client public key: $CLIENT_PUB"
 echo "  HMAC key: $HMAC_FILE"
 echo "  Server GPG UID: $SERVER_GPG_EMAIL"
+echo "  fwknopd interface: $PCAP_INTF"
+echo "  fwknop UDP port: $SPA_PORT"
 
 [[ -f "$CLIENT_PUB" ]] || die "Client public key bulunamadı: $CLIENT_PUB"
 [[ -f "$HMAC_FILE" ]] || die "HMAC key bulunamadı: $HMAC_FILE"
@@ -112,6 +129,14 @@ CMD_CYCLE_OPEN              /usr/sbin/iptables -I INPUT -p tcp -s \$SRC --dport 
 CMD_CYCLE_CLOSE             /usr/sbin/iptables -D INPUT -p tcp -s \$SRC --dport \$PORT -j ACCEPT
 CMD_CYCLE_TIMER             60
 EOF
+
+info "/etc/fwknop/fwknopd.conf append/upsert modunda güncelleniyor (overwrite yok)..."
+FWKNOPD_CONF="/etc/fwknop/fwknopd.conf"
+touch "$FWKNOPD_CONF"
+upsert_conf_line "$FWKNOPD_CONF" "PCAP_INTF" "PCAP_INTF                   $PCAP_INTF;"
+upsert_conf_line "$FWKNOPD_CONF" "PCAP_FILTER" "PCAP_FILTER                 udp port $SPA_PORT;"
+upsert_conf_line "$FWKNOPD_CONF" "ENABLE_SPA_PACKET_AGING" "ENABLE_SPA_PACKET_AGING      Y;"
+upsert_conf_line "$FWKNOPD_CONF" "MAX_SPA_PACKET_AGE" "MAX_SPA_PACKET_AGE           60;"
 
 info "fwknop-server başlatılıyor/restart ediliyor..."
 systemctl enable --now fwknop-server
