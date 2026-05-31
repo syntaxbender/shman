@@ -54,6 +54,37 @@ allow_tcp_port() {
     -m conntrack \
     --ctstate NEW \
     -j ACCEPT
+
+  if [[ "${IPV6_ENABLED:-0}" -eq 1 ]]; then
+    ip6tables -A INPUT \
+      -p tcp \
+      --dport "$port" \
+      -m conntrack \
+      --ctstate NEW \
+      -j ACCEPT
+  fi
+}
+
+allow_udp_port() {
+  local port="$1"
+  local label="$2"
+
+  echo "✓ UDP $port açılıyor ($label)"
+  iptables -A INPUT \
+    -p udp \
+    --dport "$port" \
+    -m conntrack \
+    --ctstate NEW \
+    -j ACCEPT
+
+  if [[ "${IPV6_ENABLED:-0}" -eq 1 ]]; then
+    ip6tables -A INPUT \
+      -p udp \
+      --dport "$port" \
+      -m conntrack \
+      --ctstate NEW \
+      -j ACCEPT
+  fi
 }
 
 echo "========================================="
@@ -95,6 +126,7 @@ ufw disable || true
 
 echo
 if ask_default_no "IPv6 kapatılsın mı?"; then
+  IPV6_ENABLED=0
   echo "IPv6 kapatılıyor..."
 
   cat >/etc/sysctl.d/99-disable-ipv6.conf <<'EOF'
@@ -105,7 +137,10 @@ EOF
 
   sysctl --system >/dev/null
 else
+  IPV6_ENABLED=1
   echo "IPv6 aktif bırakıldı."
+  command -v ip6tables >/dev/null 2>&1 || { echo "ip6tables komutu bulunamadı."; exit 1; }
+  command -v ip6tables-save >/dev/null 2>&1 || { echo "ip6tables-save komutu bulunamadı."; exit 1; }
 fi
 
 echo
@@ -118,17 +153,36 @@ iptables -P INPUT ACCEPT
 iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
 
+if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+  echo
+  echo "ip6tables resetleniyor..."
+  ip6tables -F
+  ip6tables -X
+  ip6tables -P INPUT ACCEPT
+  ip6tables -P FORWARD DROP
+  ip6tables -P OUTPUT ACCEPT
+fi
+
 echo
 echo "Base kurallar ekleniyor..."
 
 # loopback
 iptables -A INPUT -i lo -j ACCEPT
+if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+  ip6tables -A INPUT -i lo -j ACCEPT
+fi
 
 # established
 iptables -A INPUT \
   -m conntrack \
   --ctstate ESTABLISHED,RELATED \
   -j ACCEPT
+if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+  ip6tables -A INPUT \
+    -m conntrack \
+    --ctstate ESTABLISHED,RELATED \
+    -j ACCEPT
+fi
 
 echo "✓ loopback access"
 echo "✓ ESTABLISHED/RELATED"
@@ -138,9 +192,15 @@ echo "=== ICMP ==="
 
 if ask_default_no "Ping (ICMP) açık olsun mu?"; then
   iptables -A INPUT -p icmp -j ACCEPT
+  if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+    ip6tables -A INPUT -p ipv6-icmp -j ACCEPT
+  fi
   echo "✓ ICMP açık"
 else
   echo "✗ ICMP kapalı"
+  if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+    echo "⚠ ICMPv6 kapalı bırakıldı (IPv6 iletişimini etkileyebilir)."
+  fi
 fi
 
 echo
@@ -196,12 +256,34 @@ if ask_default_no "POP3S açılsın mı? (995)"; then
 fi
 
 echo
+echo "=== FWKNOP ==="
+
+if ask_default_no "fwknop UDP portu eklensin mi?"; then
+  while true; do
+    read -rp "fwknop UDP port: " FWKNOP_PORT
+    if [[ "$FWKNOP_PORT" =~ ^[0-9]+$ ]] && (( FWKNOP_PORT >= 1 && FWKNOP_PORT <= 65535 )); then
+      break
+    fi
+    echo "Geçerli bir port gir (1-65535)."
+  done
+  allow_udp_port "$FWKNOP_PORT" "fwknop"
+fi
+
+echo
 echo "INPUT policy DROP yapılıyor..."
 iptables -P INPUT DROP
+if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+  ip6tables -P INPUT DROP
+fi
 
 echo
 echo "Final rules:"
 iptables -L INPUT -n -v --line-numbers
+if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+  echo
+  echo "Final IPv6 rules:"
+  ip6tables -L INPUT -n -v --line-numbers
+fi
 
 echo
 if ask_default_yes "Kurallar kalıcı kaydedilsin mi?"; then
@@ -213,6 +295,9 @@ if ask_default_yes "Kurallar kalıcı kaydedilsin mi?"; then
   netfilter-persistent
 
   iptables-save > /etc/iptables/rules.v4
+  if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+    ip6tables-save > /etc/iptables/rules.v6
+  fi
 
   systemctl enable --now netfilter-persistent
   netfilter-persistent save
@@ -220,6 +305,9 @@ if ask_default_yes "Kurallar kalıcı kaydedilsin mi?"; then
   echo
   echo "✓ Kalıcı kaydedildi"
   echo "✓ /etc/iptables/rules.v4"
+  if [[ "$IPV6_ENABLED" -eq 1 ]]; then
+    echo "✓ /etc/iptables/rules.v6"
+  fi
 else
   echo "Kalıcı kaydedilmedi."
 fi
