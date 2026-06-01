@@ -141,6 +141,9 @@ rm -f "$CLIENT_KEY_SPEC_FILE"
 CLIENT_KEY_ID="$(gpg --list-secret-keys --with-colons "$CLIENT_GPG_EMAIL" | awk -F: '/^sec:/ {print $5; exit}')"
 [[ -n "$CLIENT_KEY_ID" ]] || die "Client GPG key ID bulunamadı."
 
+CLIENT_KEY_FPR="$(gpg --with-colons --list-secret-keys "$CLIENT_GPG_EMAIL" | awk -F: '/^fpr:/ {print $10; exit}')"
+[[ -n "$CLIENT_KEY_FPR" ]] || die "Client GPG key fingerprint bulunamadı."
+
 info "Client public key export ediliyor..."
 gpg --armor --export "$CLIENT_KEY_ID" > "$LOCAL_TMP/client-pub.asc"
 
@@ -155,7 +158,7 @@ SERVER_KEY_FPR="$(gpg --with-colons --list-keys "$SERVER_KEY_ID" | awk -F: '/^fp
 
 info "Server public key client private key ile imzalanıyor..."
 gpg --batch --yes --pinentry-mode loopback --passphrase "$CLIENT_GPG_PASS" \
-  --local-user "$CLIENT_KEY_ID" --quick-sign-key "$SERVER_KEY_FPR"
+  --local-user "$CLIENT_KEY_FPR" --quick-sign-key "$SERVER_KEY_FPR"
 
 info "Server public key ownertrust seviyesi ayarlanıyor (2 = I do NOT trust)..."
 printf '%s:2:\n' "$SERVER_KEY_FPR" | gpg --import-ownertrust >/dev/null
@@ -184,7 +187,7 @@ ALLOW_IP                    resolve
 
 USE_GPG                     Y
 GPG_RECIPIENT               $SERVER_KEY_ID
-GPG_SIGNER                  $CLIENT_KEY_ID
+GPG_SIGNER                  $CLIENT_KEY_FPR
 $CLIENT_GPG_PW_CFG
 
 USE_HMAC                    Y

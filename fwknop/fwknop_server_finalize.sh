@@ -115,6 +115,12 @@ gpg --homedir "$ROOT_GPG_HOME" --import "$CLIENT_PUB"
 CLIENT_KEY_FPR="$(gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-keys "$CLIENT_KEY_ID" | awk -F: '/^fpr:/ {print $10; exit}')"
 [[ -n "$CLIENT_KEY_FPR" ]] || die "Client public key fingerprint bulunamadı."
 
+CLIENT_FPR_CSV="$(gpg --homedir "$ROOT_GPG_HOME" --show-keys --with-colons "$CLIENT_PUB" \
+  | awk -F: '/^fpr:/ {print $10}' \
+  | awk '!seen[$0]++' \
+  | paste -sd, -)"
+[[ -n "$CLIENT_FPR_CSV" ]] || die "Client public key fingerprint listesi üretilemedi."
+
 info "Client public key server private key ile imzalanıyor..."
 gpg --homedir "$ROOT_GPG_HOME" --batch --yes --pinentry-mode loopback \
   --passphrase "$SERVER_GPG_PASS" --local-user "$SERVER_KEY_ID" \
@@ -150,7 +156,7 @@ GPG_DECRYPT_ID              $SERVER_KEY_ID
 $SERVER_GPG_PW_CFG
 GPG_REQUIRE_SIG             Y
 GPG_IGNORE_SIG_VERIFY_ERROR N
-GPG_FINGERPRINT_ID          $CLIENT_KEY_FPR
+GPG_FINGERPRINT_ID          $CLIENT_FPR_CSV
 
 HMAC_KEY_BASE64             $HMAC_KEY
 HMAC_DIGEST_TYPE            sha512
