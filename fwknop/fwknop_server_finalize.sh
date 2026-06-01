@@ -17,6 +17,36 @@ upsert_conf_line() {
   fi
 }
 
+rule_matches_ssh_port() {
+  local rule="$1"
+  local port="$2"
+  local dports token start end
+
+  if [[ "$rule" =~ [[:space:]]--dport[[:space:]]${port}([[:space:]]|$) ]]; then
+    return 0
+  fi
+
+  if [[ "$rule" =~ [[:space:]]--dports[[:space:]] ]]; then
+    dports="${rule#* --dports }"
+    dports="${dports%% *}"
+    IFS=',' read -r -a _ports <<< "$dports"
+    for token in "${_ports[@]}"; do
+      if [[ "$token" == "$port" ]]; then
+        return 0
+      fi
+      if [[ "$token" == *:* ]]; then
+        start="${token%%:*}"
+        end="${token##*:}"
+        if [[ "$start" =~ ^[0-9]+$ && "$end" =~ ^[0-9]+$ ]] && (( port >= start && port <= end )); then
+          return 0
+        fi
+      fi
+    done
+  fi
+
+  return 1
+}
+
 [[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./fwknop_server_finalize.sh"
 
 read -rp "Profile adı, örn mail-prod: " PROFILE
@@ -120,7 +150,7 @@ GPG_DECRYPT_ID              $SERVER_KEY_ID
 $SERVER_GPG_PW_CFG
 GPG_REQUIRE_SIG             Y
 GPG_IGNORE_SIG_VERIFY_ERROR N
-GPG_REMOTE_ID               $CLIENT_KEY_ID
+GPG_FINGERPRINT_ID          $CLIENT_KEY_FPR
 
 HMAC_KEY_BASE64             $HMAC_KEY
 HMAC_DIGEST_TYPE            sha512
@@ -184,30 +214,39 @@ if [[ -z "$SPA_RULE_FOUND" ]]; then
   sudo iptables -A INPUT -p udp --dport $SPA_PORT -j ACCEPT"
 fi
 
-info "SSH portunu açan özel ACCEPT kuralı aranıyor..."
-SSH_RULE_LINES="$(iptables -L INPUT -n --line-numbers | awk -v port="dpt:$SSH_PORT" '
-  $0 ~ /ACCEPT/ && $0 ~ /tcp/ && $0 ~ port {print $1}
-')"
+info "INPUT zincirinde SSH portunu açan tüm tcp kurallar aranıyor..."
+SSH_RULE_SPECS=()
+while IFS= read -r rule; do
+  [[ "$rule" == "-A INPUT "* ]] || continue
+  [[ "$rule" =~ [[:space:]]-p[[:space:]]tcp([[:space:]]|$) ]] || continue
+  if rule_matches_ssh_port "$rule" "$SSH_PORT"; then
+    SSH_RULE_SPECS+=("${rule#-A INPUT }")
+  fi
+done < <(iptables -S INPUT)
 
-if [[ -z "$SSH_RULE_LINES" ]]; then
-  die "SSH portunu açan tcp dpt:$SSH_PORT ACCEPT kuralı bulunamadı."
+if [[ ${#SSH_RULE_SPECS[@]} -eq 0 ]]; then
+  warn "INPUT içinde port $SSH_PORT için tcp kuralı bulunamadı."
+  info "Devam ediliyor..."
+else
+  echo
+  warn "Kaldırılacak INPUT tcp/$SSH_PORT kural(lar)ı:"
+  for rule_spec in "${SSH_RULE_SPECS[@]}"; do
+    echo "  - $rule_spec"
+  done
+  echo
+
+  read -rp "Bu SSH kural(lar)ını kaldırmak istiyor musun? [y/N]: " CONFIRM
+  CONFIRM="${CONFIRM:-N}"
+
+  if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+    die "Kullanıcı iptal etti. SSH kuralları kaldırılmadı."
+  fi
+
+  for rule_spec in "${SSH_RULE_SPECS[@]}"; do
+    read -r -a rule_parts <<< "$rule_spec"
+    iptables -D INPUT "${rule_parts[@]}"
+  done
 fi
-
-echo
-warn "Kaldırılacak SSH ACCEPT rule line numaraları:"
-echo "$SSH_RULE_LINES"
-echo
-
-read -rp "Bu SSH ACCEPT kuralını/kuralarını kaldırmak istiyor musun? [y/N]: " CONFIRM
-CONFIRM="${CONFIRM:-N}"
-
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-  die "Kullanıcı iptal etti. SSH ACCEPT kuralı kaldırılmadı."
-fi
-
-for line in $(echo "$SSH_RULE_LINES" | sort -rn); do
-  iptables -D INPUT "$line"
-done
 
 info "Güncel INPUT kuralları:"
 iptables -L INPUT -n -v --line-numbers
