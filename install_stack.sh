@@ -103,7 +103,29 @@ needrestart -r a
 if [ "$INSTALL_DEPENDENCIES" = true ]; then
   log "Dependency installations are started!" "info"
   apt upgrade -y
-  apt install -y curl wget gnupg2 gnupg net-tools dnsutils debconf-utils build-essential git git-lfs lsb-release ca-certificates software-properties-common openssl uuid-runtime
+  apt install -y \
+    curl \
+    wget \
+    gnupg \
+    gnupg2 \
+    net-tools \
+    dnsutils \
+    debconf-utils \
+    build-essential \
+    git \
+    git-lfs \
+    lsb-release \
+    ca-certificates \
+    software-properties-common \
+    openssl \
+    uuid-runtime \
+    iproute2 \
+    iputils-ping \
+    netcat-openbsd \
+    lsof \
+    htop \
+    unzip \
+    needrestart
   needrestart -r a
   log "Dependency installations are done!" "info"
 fi
