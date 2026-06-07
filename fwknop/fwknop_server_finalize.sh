@@ -171,6 +171,7 @@ FWKNOPD_CONF="/etc/fwknop/fwknopd.conf"
 touch "$FWKNOPD_CONF"
 upsert_conf_line "$FWKNOPD_CONF" "PCAP_INTF" "PCAP_INTF                   $PCAP_INTF;"
 upsert_conf_line "$FWKNOPD_CONF" "PCAP_FILTER" "PCAP_FILTER                 udp port $SPA_PORT;"
+upsert_conf_line "$FWKNOPD_CONF" "UDPSERV_PORT" "UDPSERV_PORT                $SPA_PORT;"
 upsert_conf_line "$FWKNOPD_CONF" "ENABLE_SPA_PACKET_AGING" "ENABLE_SPA_PACKET_AGING      Y;"
 upsert_conf_line "$FWKNOPD_CONF" "MAX_SPA_PACKET_AGE" "MAX_SPA_PACKET_AGE           60;"
 
