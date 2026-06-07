@@ -36,7 +36,11 @@ info "Çakışma kontrolleri yapılıyor..."
 mkdir -p "$ROOT_GPG_HOME"
 chmod 700 "$ROOT_GPG_HOME"
 
-EXISTING_SERVER_KEY_FPR="$(gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-secret-keys "$SERVER_GPG_EMAIL" | awk -F: '/^fpr:/ {print $10; exit}')"
+EXISTING_SERVER_KEY_FPR="$(
+  gpg --homedir "$ROOT_GPG_HOME" --with-colons --list-secret-keys "$SERVER_GPG_EMAIL" 2>/dev/null \
+    | awk -F: '/^fpr:/ {print $10; exit}' \
+    || true
+)"
 SERVER_KEY_EXISTS=""
 SERVER_PUB_EXISTS=""
 HMAC_EXISTS=""
