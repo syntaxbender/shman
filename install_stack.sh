@@ -210,6 +210,13 @@ if [ "$INSTALL_CERTBOT" = true ]; then
 
   if [ "$INSTALL_NGINX" = true ]; then
     apt install -y python3-certbot-nginx
+    install -d -m 0755 /etc/letsencrypt
+    install -m 0644 \
+      /usr/lib/python3/dist-packages/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf \
+      /etc/letsencrypt/options-ssl-nginx.conf
+    install -m 0644 \
+      /usr/lib/python3/dist-packages/certbot/ssl-dhparams.pem \
+      /etc/letsencrypt/ssl-dhparams.pem
   fi
 
   if [ "$INSTALL_APACHE" = true ]; then
