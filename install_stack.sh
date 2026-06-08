@@ -113,6 +113,8 @@ if [ "$INSTALL_DEPENDENCIES" = true ]; then
     debconf-utils \
     build-essential \
     git \
+    nano \
+    vim \
     git-lfs \
     lsb-release \
     ca-certificates \
