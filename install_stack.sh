@@ -185,7 +185,16 @@ fi
 if [ "$INSTALL_NGINX" = true ]; then
   log "Nginx installation started!" "info"
   apt install -y nginx
-  ./nginx_default.sh
+  if [ -d "/etc/nginx/sites-enabled" ]; then
+    find /etc/nginx/sites-enabled -maxdepth 1 \( -type f -o -type l \) -exec rm -f {} +
+    log "Disabled nginx configs in /etc/nginx/sites-enabled" "info"
+  fi
+
+  nginx -t && \
+    {
+      systemctl reload nginx || systemctl restart nginx
+    } || \
+    log "Nginx configuration failed!" "error"
   log "Nginx installation done!" "info"
 fi
 
