@@ -127,7 +127,14 @@ if [ "$INSTALL_DEPENDENCIES" = true ]; then
     lsof \
     htop \
     unzip \
-    needrestart
+    needrestart \
+    traceroute \
+    tcpdump \
+    jq \
+    tree \
+    zip \
+    tar \
+    rsync
   needrestart -r a
   log "Dependency installations are done!" "info"
 fi
