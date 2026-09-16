@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+
 KEY_NAME=""
 KEY_DIR="/mnt/shman-ssh"
 RAM_HOME=""
@@ -10,21 +14,8 @@ REMOTE_USER=""
 REMOTE_HOST=""
 SSH_PORT=""
 
-die() {
-  echo "Hata: $*" >&2
-  exit 1
-}
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "Gerekli komut bulunamadı: $1"
-}
-
 require_dependencies() {
-  local command_name
-
-  for command_name in ssh ssh-keygen ssh-copy-id sudo mount findmnt id mkdir chmod; do
-    require_command "$command_name"
-  done
+  require_commands ssh ssh-keygen ssh-copy-id sudo mount findmnt id mkdir chmod
 }
 
 harden_process_environment() {

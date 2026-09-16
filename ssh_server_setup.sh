@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/config.sh
+source "$SCRIPT_DIR/lib/config.sh"
+
 DEFAULT_TARGET_USER="ubuntu"
 TARGET_USER=""
 SSHD_CONFIG="/etc/ssh/sshd_config"
@@ -13,49 +19,6 @@ USER_HOME=""
 USER_SHELL=""
 SSH_DIR=""
 AUTHORIZED_KEYS=""
-
-die() {
-  echo "Hata: $*" >&2
-  exit 1
-}
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "Gerekli komut bulunamadı: $1"
-}
-
-ask_default_no() {
-  local prompt="$1"
-  local answer
-
-  while true; do
-    read -rp "$prompt [y/N]: " answer
-    answer="${answer,,}"
-
-    case "$answer" in
-      y|yes|e|evet) return 0 ;;
-      ""|n|no|h|hayir|hayır) return 1 ;;
-      *) echo "Lütfen y veya n gir." ;;
-    esac
-  done
-}
-
-read_port() {
-  local default_port="$1"
-  local answer
-
-  while true; do
-    read -rp "SSH TCP portu [$default_port]: " answer
-    answer="${answer:-$default_port}"
-
-    if [[ "$answer" =~ ^[0-9]{1,5}$ ]] &&
-      ((10#$answer >= 1 && 10#$answer <= 65535)); then
-      SSH_PORT="$((10#$answer))"
-      return 0
-    fi
-
-    echo "Geçerli bir port gir (1-65535)."
-  done
-}
 
 port_is_listening() {
   local port="$1"
@@ -70,16 +33,11 @@ set_sshd_option() {
   local option="$1"
   local value="$2"
 
-  if grep -Eiq "^[[:space:]]*${option}[[:space:]]+" "$MANAGED_CONFIG"; then
-    sed -Ei "s|^[[:space:]]*${option}[[:space:]]+.*$|${option} ${value}|I" \
-      "$MANAGED_CONFIG"
-  else
-    printf '%s %s\n' "$option" "$value" >>"$MANAGED_CONFIG"
-  fi
-}
-
-require_root() {
-  [[ "$EUID" -eq 0 ]] || die "Bu script root olarak çalışmalı: sudo bash $0"
+  upsert_config_line \
+    "$MANAGED_CONFIG" \
+    "^[[:space:]]*${option}[[:space:]]+" \
+    "${option} ${value}" \
+    1
 }
 
 require_dependencies() {
@@ -89,9 +47,7 @@ require_dependencies() {
     awk ss grep sed
   )
 
-  for command_name in "${commands[@]}"; do
-    require_command "$command_name"
-  done
+  require_commands "${commands[@]}"
 }
 
 select_target_user() {
@@ -163,7 +119,7 @@ select_ssh_port() {
   )"
 
   [[ "$CURRENT_PORT" =~ ^[0-9]+$ ]] || CURRENT_PORT=22
-  read_port "$CURRENT_PORT"
+  read_port "SSH TCP portu" "$CURRENT_PORT" SSH_PORT
 }
 
 validate_selected_port() {

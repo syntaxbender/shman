@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-info(){ echo -e "\n[INFO] $*"; }
-warn(){ echo -e "\n[WARN] $*"; }
-die(){ echo -e "\n[ERR] $*" >&2; exit 1; }
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 profile_exists_in_fwknoprc() {
   local profile="$1"

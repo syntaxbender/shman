@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-info(){ echo -e "\n[INFO] $*"; }
-warn(){ echo -e "\n[WARN] $*"; }
-die(){ echo -e "\n[ERR] $*" >&2; exit 1; }
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
+# shellcheck source=../lib/config.sh
+source "$REPO_ROOT/lib/config.sh"
 
 upsert_conf_line() {
   local conf_file="$1"
   local key="$2"
   local line="$3"
 
-  if grep -Eq "^[[:space:]]*${key}[[:space:]]+" "$conf_file"; then
-    sed -i -E "s|^[[:space:]]*${key}[[:space:]].*|${line}|" "$conf_file"
-  else
-    printf '%s\n' "$line" >> "$conf_file"
-  fi
+  upsert_config_line "$conf_file" "^[[:space:]]*${key}[[:space:]]+" "$line"
 }
 
 rule_matches_ssh_port() {
@@ -47,7 +45,7 @@ rule_matches_ssh_port() {
   return 1
 }
 
-[[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./fwknop_server_finalize.sh"
+require_root
 
 read -rp "Profile adı, örn mail-prod: " PROFILE
 [[ -n "$PROFILE" ]] || die "Profile boş olamaz."

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if [[ $EUID -ne 0 ]]; then
-    echo "Run as root:"
-    echo "  sudo bash $0"
-    exit 1
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+
+require_root
 
 KERNEL="$(uname -r)"
 INITRD="/boot/initrd.img-$KERNEL"

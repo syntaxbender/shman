@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-info(){ echo -e "\n[INFO] $*"; }
-warn(){ echo -e "\n[WARN] $*"; }
-die(){ echo -e "\n[ERR] $*" >&2; exit 1; }
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
-[[ $EUID -eq 0 ]] || die "Root olarak çalıştır: sudo ./fwknop_server_prepare.sh"
+require_root
 
 read -rp "Profile adı, örn mail-prod: " PROFILE
 [[ -n "$PROFILE" ]] || die "Profile boş olamaz."

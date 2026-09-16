@@ -1,31 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+
 USERNAME=""
 USER_HOME=""
 SHELL_ACCESS=0
 LOGIN_SHELL="/usr/sbin/nologin"
 
-die() {
-  echo "Error: $*" >&2
-  exit 1
-}
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
-}
-
-require_root() {
-  [[ "$EUID" -eq 0 ]] || die "please run as root"
-}
-
 require_dependencies() {
-  local command_name
   local commands=(useradd usermod passwd mkdir chmod chown)
 
-  for command_name in "${commands[@]}"; do
-    require_command "$command_name"
-  done
+  require_commands "${commands[@]}"
 }
 
 parse_arguments() {
