@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET_USER="ubuntu"
+DEFAULT_TARGET_USER="ubuntu"
+TARGET_USER=""
 SSHD_CONFIG="/etc/ssh/sshd_config"
 MANAGED_CONFIG="/etc/ssh/sshd_config.d/00-shman-hardening.conf"
 
@@ -9,6 +10,7 @@ CONFIG_BACKUP=""
 CURRENT_PORT=""
 SSH_PORT=""
 USER_HOME=""
+USER_SHELL=""
 SSH_DIR=""
 AUTHORIZED_KEYS=""
 
@@ -92,6 +94,19 @@ require_dependencies() {
   done
 }
 
+select_target_user() {
+  local answer
+
+  read -rp "SSH erişimi verilecek kullanıcı [$DEFAULT_TARGET_USER]: " answer
+  TARGET_USER="${answer:-$DEFAULT_TARGET_USER}"
+
+  [[ "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] ||
+    die "Geçersiz kullanıcı adı: $TARGET_USER"
+
+  [[ "$TARGET_USER" != "root" ]] ||
+    die "Root SSH erişimi bu script tarafından kapatılır; root seçilemez."
+}
+
 load_target_user_paths() {
   local user_entry
 
@@ -99,6 +114,17 @@ load_target_user_paths() {
     die "$TARGET_USER kullanıcısı bulunamadı."
 
   USER_HOME="$(awk -F: '{ print $6 }' <<<"$user_entry")"
+  USER_SHELL="$(awk -F: '{ print $7 }' <<<"$user_entry")"
+
+  [[ -d "$USER_HOME" ]] ||
+    die "$TARGET_USER kullanıcısının home dizini bulunamadı: $USER_HOME"
+
+  case "$USER_SHELL" in
+    */nologin|*/false)
+      die "$TARGET_USER SSH oturumu açabilen bir kullanıcı değil: $USER_SHELL"
+      ;;
+  esac
+
   SSH_DIR="$USER_HOME/.ssh"
   AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
 }
@@ -169,7 +195,7 @@ prepare_managed_config() {
   fi
 
   install -m 0644 /dev/null "$MANAGED_CONFIG"
-  printf '%s\n' '# Managed by shman/ssh_setup.sh' >>"$MANAGED_CONFIG"
+  printf '%s\n' '# Managed by shman/ssh_server_setup.sh' >>"$MANAGED_CONFIG"
 }
 
 apply_hardening_options() {
@@ -247,6 +273,7 @@ cleanup() {
 main() {
   require_root
   require_dependencies
+  select_target_user
   load_target_user_paths
   confirm_authorized_keys
   validate_current_sshd_config
