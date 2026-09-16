@@ -2,6 +2,8 @@
 set -euo pipefail
 
 KEY_NAME=""
+KEY_DIR="/mnt/shman-ssh"
+RAM_HOME=""
 PRIVATE_KEY=""
 PUBLIC_KEY=""
 REMOTE_USER=""
@@ -20,9 +22,14 @@ require_command() {
 require_dependencies() {
   local command_name
 
-  for command_name in ssh ssh-keygen ssh-copy-id install chmod; do
+  for command_name in ssh ssh-keygen ssh-copy-id sudo mount findmnt id mkdir chmod; do
     require_command "$command_name"
   done
+}
+
+harden_process_environment() {
+  umask 077
+  ulimit -c 0 || die "Core dump limiti kapatılamadı."
 }
 
 read_key_name() {
@@ -37,15 +44,41 @@ read_key_name() {
   done
 }
 
-prepare_key_paths() {
-  local ssh_dir
+prepare_ram_key_directory() {
+  local current_filesystem=""
+  local mount_options=""
+  local user_id
+  local group_id
 
-  [[ -n "${HOME:-}" ]] || die "HOME ortam değişkeni bulunamadı."
+  user_id="$(id -u)"
+  group_id="$(id -g)"
 
-  ssh_dir="$HOME/.ssh"
-  install -d -m 0700 "$ssh_dir"
+  sudo mkdir -p "$KEY_DIR"
 
-  PRIVATE_KEY="$ssh_dir/$KEY_NAME"
+  if current_filesystem="$(findmnt -rn -M "$KEY_DIR" -o FSTYPE 2>/dev/null)"; then
+    [[ "$current_filesystem" == "tmpfs" ]] ||
+      die "$KEY_DIR başka bir dosya sistemi tarafından kullanılıyor."
+    echo "Mevcut tmpfs kullanılacak: $KEY_DIR"
+  else
+    sudo mount -t tmpfs \
+      -o "size=1M,noswap,mode=700,uid=$user_id,gid=$group_id" \
+      tmpfs "$KEY_DIR" ||
+      die "tmpfs bağlanamadı. Kernel noswap seçeneğini desteklemiyor olabilir."
+  fi
+
+  mount_options="$(findmnt -rn -M "$KEY_DIR" -o OPTIONS)"
+  case ",$mount_options," in
+    *,noswap,*) ;;
+    *) die "$KEY_DIR tmpfs mount'unda noswap seçeneği etkin değil." ;;
+  esac
+
+  findmnt -no TARGET,FSTYPE,OPTIONS "$KEY_DIR"
+
+  RAM_HOME="$KEY_DIR/client-home"
+  mkdir -p "$RAM_HOME/.ssh"
+  chmod 0700 "$RAM_HOME" "$RAM_HOME/.ssh"
+
+  PRIVATE_KEY="$KEY_DIR/$KEY_NAME"
   PUBLIC_KEY="$PRIVATE_KEY.pub"
 
   if [[ -e "$PRIVATE_KEY" || -e "$PUBLIC_KEY" ]]; then
@@ -96,7 +129,7 @@ generate_ssh_key() {
   echo "Ed25519 anahtarı oluşturuluyor: $PRIVATE_KEY"
   echo "ssh-keygen parola sorarsa isteğe bağlı bir key parolası girebilirsin."
 
-  ssh-keygen -t ed25519 -C "$KEY_NAME" -f "$PRIVATE_KEY"
+  ssh-keygen -t ed25519 -a 100 -C "$KEY_NAME" -f "$PRIVATE_KEY"
   chmod 0400 "$PRIVATE_KEY"
   chmod 0644 "$PUBLIC_KEY"
 }
@@ -106,11 +139,13 @@ copy_public_key() {
   echo "Public key $REMOTE_USER@$REMOTE_HOST hesabına kopyalanıyor."
   echo "Hedef kullanıcının mevcut parolası veya çalışan bir SSH erişimi gerekebilir."
 
-  if ! ssh-copy-id -i "$PUBLIC_KEY" -p "$SSH_PORT" \
+  if ! HOME="$RAM_HOME" ssh-copy-id \
+    -o "UserKnownHostsFile=$KEY_DIR/known_hosts" \
+    -i "$PUBLIC_KEY" -p "$SSH_PORT" \
     "$REMOTE_USER@$REMOTE_HOST"; then
-    echo "Anahtar dosyaları local bilgisayarda korunuyor." >&2
+    echo "Anahtar dosyaları tmpfs üzerinde korunuyor." >&2
     echo "Tekrar denemek için:" >&2
-    echo "  ssh-copy-id -i $PUBLIC_KEY -p $SSH_PORT $REMOTE_USER@$REMOTE_HOST" >&2
+    echo "  HOME=$RAM_HOME ssh-copy-id -o UserKnownHostsFile=$KEY_DIR/known_hosts -i $PUBLIC_KEY -p $SSH_PORT $REMOTE_USER@$REMOTE_HOST" >&2
     die "Public key kopyalanamadı. Hedef kullanıcının SSH erişimini kontrol et."
   fi
 }
@@ -123,15 +158,23 @@ print_completion_summary() {
   echo "  Comment     : $KEY_NAME"
   echo "  Uzak hesap  : $REMOTE_USER@$REMOTE_HOST"
   echo "  SSH portu   : $SSH_PORT"
+  echo "  Depolama    : tmpfs (noswap)"
+  echo
+  echo "UYARI: Bilgisayar yeniden başlatılırsa veya $KEY_DIR unmount edilirse"
+  echo "private key kalıcı olarak kaybolur. Mount otomatik kaldırılmamıştır."
   echo
   echo "Bağlantı testi:"
-  echo "  ssh -i $PRIVATE_KEY -p $SSH_PORT $REMOTE_USER@$REMOTE_HOST"
+  echo "  ssh -o UserKnownHostsFile=$KEY_DIR/known_hosts -i $PRIVATE_KEY -p $SSH_PORT $REMOTE_USER@$REMOTE_HOST"
+  echo
+  echo "Anahtarı yok etmek için:"
+  echo "  sudo umount $KEY_DIR"
 }
 
 main() {
+  harden_process_environment
   require_dependencies
   read_key_name
-  prepare_key_paths
+  prepare_ram_key_directory
   read_remote_user
   read_remote_host
   read_ssh_port
