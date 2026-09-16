@@ -1,54 +1,109 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-if [[ "$EUID" -ne 0 ]]; then
-  echo "Please run as root! exiting..."
-  exit 1
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
 SVC_NAME=""
-USER=""
+TARGET_USER=""
 EXEC_NPM=""
 PORT=""
-DESC=""
-ENV_FILE=false
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -sn|--svc-name)
-      SVC_NAME="$2"; shift;;
-    -u|--user)
-      USER="$2"; shift;;
-    -enpm|--exec-npm)
-      EXEC_NPM="$2"; shift;;
-    -p|--port)
-      PORT="$2"; shift;;
-    -d|--description)
-      DESC="$2"; shift;;
-    -envf|--env-file)
-      ENV_FILE=true;;
-    *)
-      echo "Unknown option: $1"
-      exit 1
-      ;;
-  esac
-  shift
-done
+DESCRIPTION=""
+ENV_FILE=0
+TEMP_UNIT=""
 
-if [[
-  -z "$SVC_NAME" || -z "$USER" || -z "$EXEC_NPM" || -z "$DESC" ||
-  "$SVC_NAME" == -* || "$USER" == -* || "$EXEC_NPM" == -* || "$DESC" == -*
-]]; then
-    echo "Error: --user, --exec-npm, --description, --svc-name args required."
-    echo "Usage: [...] --user username --exec-npm \"run start\" --description \"prod service\" --svc-name \"service\" [--port 3000] [--env-file]"
-    exit 1
-fi
+parse_arguments() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -sn|--svc-name)
+        [[ $# -ge 2 ]] || die "--svc-name değer gerektirir."
+        SVC_NAME="$2"
+        shift 2
+        ;;
+      -u|--user)
+        [[ $# -ge 2 ]] || die "--user değer gerektirir."
+        TARGET_USER="$2"
+        shift 2
+        ;;
+      -enpm|--exec-npm)
+        [[ $# -ge 2 ]] || die "--exec-npm değer gerektirir."
+        EXEC_NPM="$2"
+        shift 2
+        ;;
+      -p|--port)
+        [[ $# -ge 2 ]] || die "--port değer gerektirir."
+        PORT="$2"
+        shift 2
+        ;;
+      -d|--description)
+        [[ $# -ge 2 ]] || die "--description değer gerektirir."
+        DESCRIPTION="$2"
+        shift 2
+        ;;
+      -envf|--env-file)
+        ENV_FILE=1
+        shift
+        ;;
+      *) die "Bilinmeyen seçenek: $1" ;;
+    esac
+  done
+}
 
-PORT_LINE=""
-ENV_FILE_LINE=""
-[[ -n "$PORT" ]] && PORT_LINE="Environment=PORT=$PORT"
-[[ "$ENV_FILE" = true ]] && ENV_FILE_LINE="EnvironmentFile=/home/${USER}/app/.env"
+validate_inputs() {
+  [[ -n "$SVC_NAME" && -n "$TARGET_USER" && -n "$EXEC_NPM" && -n "$DESCRIPTION" ]] ||
+    die "--user, --exec-npm, --description ve --svc-name zorunludur."
+  [[ "$SVC_NAME" =~ ^[a-zA-Z0-9_.@-]+$ ]] || die "Geçersiz servis adı."
+  [[ "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] || die "Geçersiz kullanıcı adı."
+  id "$TARGET_USER" >/dev/null 2>&1 || die "Kullanıcı bulunamadı: $TARGET_USER"
+  [[ "$EXEC_NPM" != *$'\n'* && "$DESCRIPTION" != *$'\n'* ]] ||
+    die "Exec veya açıklama yeni satır içeremez."
 
-export USER EXEC_NPM DESC PORT_LINE ENV_FILE_LINE
+  if [[ -n "$PORT" ]]; then
+    [[ "$PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$PORT >= 1 && 10#$PORT <= 65535)) ||
+      die "Geçersiz port: $PORT"
+  fi
+}
 
-envsubst < ./templates/systemd/service.template > "/etc/systemd/system/${SVC_NAME}.service"
+render_unit() {
+  local port_line=""
+  local env_file_line=""
 
-echo "Service file created at /etc/systemd/system/${SVC_NAME}.service"
+  [[ -n "$PORT" ]] && port_line="Environment=PORT=$PORT"
+  [[ "$ENV_FILE" -eq 1 ]] && env_file_line="EnvironmentFile=/home/${TARGET_USER}/app/.env"
+
+  TEMP_UNIT="$(mktemp "/tmp/${SVC_NAME}.XXXXXX.service")"
+  USER="$TARGET_USER" \
+  EXEC_NPM="$EXEC_NPM" \
+  DESC="$DESCRIPTION" \
+  PORT_LINE="$port_line" \
+  ENV_FILE_LINE="$env_file_line" \
+    envsubst <"$SCRIPT_DIR/templates/systemd/service.template" >"$TEMP_UNIT"
+}
+
+install_unit() {
+  local destination="/etc/systemd/system/${SVC_NAME}.service"
+
+  systemd-analyze verify "$TEMP_UNIT"
+  install -m 0644 "$TEMP_UNIT" "$destination"
+  systemctl daemon-reload
+  echo "Service file created at $destination"
+}
+
+cleanup() {
+  if [[ -n "$TEMP_UNIT" ]]; then
+    rm -f -- "$TEMP_UNIT"
+  fi
+}
+
+main() {
+  require_root
+  require_commands id envsubst mktemp systemd-analyze install systemctl rm
+  parse_arguments "$@"
+  validate_inputs
+  render_unit
+  install_unit
+}
+
+trap cleanup EXIT
+main "$@"
