@@ -1,82 +1,102 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-if [[ "$EUID" -ne 0 ]]; then
-  echo "Please run as root! exiting..."
-  exit 1
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
-DOMAINS=false
 WEB_SERVER="nginx"
+INPUT_DOMAINS=()
+CERTBOT_DOMAINS=()
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -d|--domains)
-      if [[ -n "$2" ]]; then
-        DOMAINS=true
-        IFS=',' read -r -a input_domains <<< "$2"
-        first_arg_domain="${input_domains[0]}"
-        shift
-      else
-        echo "Error: --domains requires a value."
-        exit 1
-      fi
-      ;;
-    -w|--web-server)
-      if [[ -n "$2" ]]; then
+parse_arguments() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -d|--domains)
+        [[ $# -ge 2 && -n "${2:-}" ]] || die "--domains değer gerektirir."
+        IFS=',' read -r -a INPUT_DOMAINS <<<"$2"
+        shift 2
+        ;;
+      -w|--web-server)
+        [[ $# -ge 2 && -n "${2:-}" ]] || die "--web-server değer gerektirir."
         WEB_SERVER="$2"
-        shift
-      else
-        echo "Error: --web-server requires a value."
-        exit 1
-      fi
-      ;;
-    *)
-      echo "Unknown option: $1"
-      exit 1
-      ;;
-  esac
-  shift
-done
+        shift 2
+        ;;
+      *) die "Bilinmeyen seçenek: $1" ;;
+    esac
+  done
+}
 
-if [ "$DOMAINS" = false ]; then
-    echo "Error: --domains arg required."
-    echo "Usage: [...] --domains "example.com,www.example.com" [--web-server nginx|apache]"
-    exit 1
-fi
+validate_inputs() {
+  local domain
 
-if [[ "$WEB_SERVER" != "apache" && "$WEB_SERVER" != "nginx" ]]; then
-    echo "Error: --web-server arg must be nginx or apache"
-    exit 1
-fi
+  [[ "${#INPUT_DOMAINS[@]}" -gt 0 ]] ||
+    die "Kullanım: $0 --domains example.com,www.example.com [--web-server nginx|apache]"
+  [[ "$WEB_SERVER" == nginx || "$WEB_SERVER" == apache ]] ||
+    die "--web-server nginx veya apache olmalıdır."
 
-declare -A shortest_domains
+  for domain in "${INPUT_DOMAINS[@]}"; do
+    [[ "$domain" =~ ^([a-zA-Z0-9-]+\.)+[a-zA-Z0-9-]{2,63}$ ]] ||
+      die "Geçersiz domain: $domain"
+  done
+}
 
-CERTBOT_OUTPUT=$(certbot certificates 2>/dev/null || true)
+collect_certificate_domains() {
+  local certbot_output
+  local line
+  local domain
+  local first_domain="${INPUT_DOMAINS[0]}"
+  local existing_domains=()
+  local matching_domains=()
 
-while IFS= read -r line; do
-    if [[ "$line" =~ ^[[:space:]]*Domains:\ (.*)$ ]]; then
-        domain_list="${BASH_REMATCH[1]}"
-        IFS=' ' read -r -a domains <<< "$domain_list"
-        sorted=($(for d in "${domains[@]}"; do echo "$d"; done | awk '{ print length, $0 }' | sort -n | cut -d' ' -f2-))
-        shortest="${sorted[0]}"
-        sorted_joined=$(printf "%s " "${sorted[@]}")
-        sorted_joined=${sorted_joined% }
-        shortest_domains["$shortest"]="$sorted_joined"
+  certbot_output="$(certbot certificates 2>/dev/null || true)"
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*Domains:[[:space:]]+(.*)$ ]]; then
+      read -ra existing_domains <<<"${BASH_REMATCH[1]}"
+      for domain in "${existing_domains[@]}"; do
+        if [[ "$domain" == "$first_domain" ]]; then
+          matching_domains=("${existing_domains[@]}")
+          break 2
+        fi
+      done
     fi
-done <<< "$CERTBOT_OUTPUT"
+  done <<<"$certbot_output"
 
-matched_value=""
-for key in "${!shortest_domains[@]}"; do
-    if [[ "$first_arg_domain" == *"$key"* ]]; then
-        matched_value="${shortest_domains[$key]}"
-        break
-    fi
-done
+  mapfile -t CERTBOT_DOMAINS < <(
+    printf '%s\n' "${matching_domains[@]}" "${INPUT_DOMAINS[@]}" |
+      awk 'NF && !seen[$0]++ { print length($0), $0 }' |
+      sort -n |
+      cut -d' ' -f2-
+  )
+}
 
-combined_domains=($matched_value "${input_domains[@]}")
-sorted_combined=($(for d in "${combined_domains[@]}"; do echo "$d"; done | awk '{ print length, $0 }' | sort -n | cut -d' ' -f2-))
+request_certificate() {
+  local primary_domain="${CERTBOT_DOMAINS[0]}"
+  local certbot_args=()
+  local domain
 
-PRIMARY_DOMAIN="${sorted_combined[0]}"
-DOMAINS=$(IFS=','; echo "${sorted_combined[*]}")
+  for domain in "${CERTBOT_DOMAINS[@]}"; do
+    certbot_args+=(-d "$domain")
+  done
 
-certbot certonly -a $WEB_SERVER --agree-tos --no-eff-email --staple-ocsp --force-renewal --email info@$PRIMARY_DOMAIN -d $DOMAINS
+  certbot certonly \
+    -a "$WEB_SERVER" \
+    --agree-tos \
+    --no-eff-email \
+    --staple-ocsp \
+    --force-renewal \
+    --email "info@$primary_domain" \
+    "${certbot_args[@]}"
+}
+
+main() {
+  require_root
+  require_commands certbot awk sort cut
+  parse_arguments "$@"
+  validate_inputs
+  collect_certificate_domains
+  request_certificate
+}
+
+main "$@"
