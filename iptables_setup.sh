@@ -1,56 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+
 # ==========================
 # Interactive iptables setup
 # ==========================
-
-if [[ $EUID -ne 0 ]]; then
-  echo "Bu script root olarak çalışmalı."
-  echo "Kullanım: sudo bash $0"
-  exit 1
-fi
-
-ask_default_yes() {
-  local prompt="$1"
-  local answer
-
-  while true; do
-    read -rp "$prompt [Y/n]: " answer
-    answer="${answer,,}"
-
-    case "$answer" in
-      ""|y|yes|e|evet) return 0 ;;
-      n|no|h|hayir|hayır) return 1 ;;
-      *) echo "Lütfen y veya n gir." ;;
-    esac
-  done
-}
-
-ask_default_no() {
-  local prompt="$1"
-  local answer
-
-  while true; do
-    read -rp "$prompt [y/N]: " answer
-    answer="${answer,,}"
-
-    case "$answer" in
-      y|yes|e|evet) return 0 ;;
-      ""|n|no|h|hayir|hayır) return 1 ;;
-      *) echo "Lütfen y veya n gir." ;;
-    esac
-  done
-}
-
-require_command() {
-  local command_name="$1"
-
-  if ! command -v "$command_name" >/dev/null 2>&1; then
-    echo "Gerekli komut bulunamadı: $command_name" >&2
-    exit 1
-  fi
-}
 
 is_valid_interface() {
   local interface_name="$1"
@@ -142,27 +99,6 @@ add_udp_port() {
 
   UDP_PORTS+=("$port")
   echo "✓ UDP $port seçildi ($label)"
-}
-
-read_port() {
-  local prompt="$1"
-  local default_port="$2"
-  local result_name="$3"
-  local answer
-  local -n result="$result_name"
-
-  while true; do
-    read -rp "$prompt [$default_port]: " answer
-    answer="${answer:-$default_port}"
-
-    if [[ "$answer" =~ ^[0-9]{1,5}$ ]] && \
-      ((10#$answer >= 1 && 10#$answer <= 65535)); then
-      result="$((10#$answer))"
-      return 0
-    fi
-
-    echo "Geçerli bir port gir (1-65535)."
-  done
 }
 
 detect_ssh_port() {
@@ -646,6 +582,9 @@ NETFILTER_ENABLE_TOUCHED=0
 PERSIST_V4_STAGE=""
 PERSIST_V6_STAGE=""
 TRANSACTION_ACTIVE=0
+DESIRED_IPV6_DISABLED=0
+V4_RULESET=""
+V6_RULESET=""
 
 cleanup() {
   local path
@@ -680,10 +619,7 @@ on_interrupt() {
   exit 143
 }
 
-trap on_exit EXIT
-trap 'on_interrupt INT' INT
-trap 'on_interrupt TERM' TERM
-
+print_banner() {
 echo "========================================="
 echo "   Interactive iptables setup"
 echo "========================================="
@@ -709,19 +645,21 @@ echo
 echo "WAN giriş trafiği özel bir zincirle filtrelenecek."
 echo "Diğer INPUT arayüzleri korunacak; FORWARD ve OUTPUT için ayrıca onay alınacak."
 echo
+}
 
+confirm_execution() {
 if ! ask_default_yes "Devam edilsin mi?"; then
   echo "İptal edildi."
   exit 0
 fi
+}
 
+require_initial_dependencies() {
 # Salt okunur gösterim için gereken IPv4 araçlarını önce doğrula.
-require_command iptables
-require_command iptables-save
-require_command iptables-restore
-require_command ip
-require_command awk
+require_commands iptables iptables-save iptables-restore ip awk
+}
 
+collect_wan_settings() {
 collect_default_route_interfaces 4 IPV4_WAN_CANDIDATES
 collect_default_route_interfaces 6 IPV6_WAN_CANDIDATES
 
@@ -745,7 +683,9 @@ select_wan_interface IPv6 IPV6_WAN_INTERFACE IPV6_WAN_CANDIDATES "$IPV4_WAN_INTE
 echo
 echo "Seçilen IPv4 WAN interface: $IPV4_WAN_INTERFACE"
 echo "Seçilen IPv6 WAN interface: $IPV6_WAN_INTERFACE"
+}
 
+collect_chain_reset_preferences() {
 echo
 echo "=== MEVCUT FORWARD / OUTPUT ==="
 show_chain iptables IPv4 FORWARD
@@ -771,7 +711,9 @@ fi
 if ask_default_no "IPv4 ve IPv6 OUTPUT kuralları sıfırlansın mı?"; then
   RESET_OUTPUT=1
 fi
+}
 
+collect_service_preferences() {
 echo
 echo "=== ICMP ==="
 if ask_default_no "Ping açık olsun mu?"; then
@@ -841,7 +783,9 @@ if ask_default_no "fwknop UDP portu eklensin mi?"; then
   done
   add_udp_port "$FWKNOP_PORT" "fwknop"
 fi
+}
 
+collect_persistence_preference() {
 echo
 if ask_default_yes "IPv4 ve IPv6 durumu yeniden başlatmalarda kalıcı olsun mu?"; then
   PERSIST_RULES=1
@@ -849,15 +793,11 @@ else
   PERSIST_RULES=0
   echo "Uyarı: Eski rules.v4/rules.v6 silinecek; bu ayarlar yalnızca mevcut oturumda geçerli olacak."
 fi
+}
 
+run_preflight_checks() {
 # Bütün sorular yanıtlandı. Bundan sonra ön kontrol ve uygulama yapılır.
-require_command sysctl
-require_command mktemp
-require_command chmod
-require_command mv
-require_command rm
-require_command mkdir
-require_command cp
+require_commands sysctl mktemp chmod mv rm mkdir cp
 
 DESIRED_IPV6_DISABLED=0
 if [[ "$IPV6_ENABLED" -eq 0 ]]; then
@@ -895,7 +835,9 @@ if [[ "$PERSIST_RULES" -eq 1 ]]; then
     require_command dpkg-query
   fi
 fi
+}
 
+prepare_rulesets() {
 V4_RULESET="$(mktemp /tmp/iptables-setup-v4.XXXXXX)"
 TEMP_FILES+=("$V4_RULESET")
 build_filter_ruleset ipv4 iptables-save "$V4_RULESET"
@@ -908,7 +850,9 @@ if [[ -e /proc/sys/net/ipv6/conf/all/disable_ipv6 ]]; then
   build_filter_ruleset ipv6 ip6tables-save "$V6_RULESET"
   ip6tables-restore --wait "$XTABLES_WAIT_SECONDS" --test <"$V6_RULESET"
 fi
+}
 
+apply_firewall_configuration() {
 capture_transaction_state
 TRANSACTION_ACTIVE=1
 
@@ -993,7 +937,9 @@ else
   rm -f -- /etc/iptables/rules.v4 /etc/iptables/rules.v6
   echo "✓ Eski kalıcı IPv4/IPv6 kural dosyaları silindi"
 fi
+}
 
+print_final_status() {
 echo
 echo "Final IPv4 rules:"
 iptables --wait "$XTABLES_WAIT_SECONDS" -L INPUT -n -v --line-numbers
@@ -1020,8 +966,31 @@ elif [[ "$IPV6_BOOT_DISABLED" -eq 1 || ! -e /proc/sys/net/ipv6/conf/all/disable_
 else
   echo "IPv6 WAN durumu: kapalı ($IPV6_WAN_INTERFACE)"
 fi
+}
 
-TRANSACTION_ACTIVE=0
+main() {
+  require_root
 
-echo
-echo "Tamamlandı."
+  trap on_exit EXIT
+  trap 'on_interrupt INT' INT
+  trap 'on_interrupt TERM' TERM
+
+  print_banner
+  confirm_execution
+  require_initial_dependencies
+  collect_wan_settings
+  collect_chain_reset_preferences
+  collect_service_preferences
+  collect_persistence_preference
+  run_preflight_checks
+  prepare_rulesets
+  apply_firewall_configuration
+  print_final_status
+
+  TRANSACTION_ACTIVE=0
+
+  echo
+  echo "Tamamlandı."
+}
+
+main "$@"

@@ -1,224 +1,230 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+
 export DEBIAN_FRONTEND=noninteractive
 
-if [[ "$EUID" -ne 0 ]]; then
-  echo "Please run as root! exiting..."
-  exit 1
-fi
+INSTALL_DEPENDENCIES=0
+INSTALL_POSTGRES=0
+INSTALL_MYSQL=0
+INSTALL_NGINX=0
+INSTALL_APACHE=0
+INSTALL_CERTBOT=0
+INSTALL_PODMAN=0
+INSTALL_PHP=0
+INSTALL_NODE=0
+INSTALL_FORGEJO=0
 
-# Logger Function from node installation file xd
+MYSQL_ROOT_PASSWORD=""
+MYSQL_ROOT_PASSWORD_AGAIN=""
+FORGEJO_LOOPBACK_PORT=6010
+FORGEJO_DOMAIN="git.example.com"
+
 log() {
   local message="$1"
-  local type="$2"
-  local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  local type="${2:-info}"
+  local timestamp
   local color
   local endcolor="\033[0m"
 
+  timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
   case "$type" in
-    "info") color="\033[38;5;79m" ;;
-    "success") color="\033[1;32m" ;;
-    "error") color="\033[1;31m" ;;
+    info) color="\033[38;5;79m" ;;
+    success) color="\033[1;32m" ;;
+    error) color="\033[1;31m" ;;
     *) color="\033[1;34m" ;;
   esac
 
   echo -e "${color}${timestamp} - ${message}${endcolor}"
 }
 
-INSTALL_DEPENDENCIES=false
-INSTALL_POSTGRES=false
-INSTALL_MYSQL=false
-INSTALL_NGINX=false
-INSTALL_APACHE=false
-INSTALL_CERTBOT=false
-INSTALL_PODMAN=false
-INSTALL_PHP=false
-INSTALL_NODE=false
-INSTALL_FORGEJO=false
-FORGEJO_LOOPBACK_PORT=6010
-FORGEJO_DOMAIN="git.example.com"
+parse_arguments() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -dep|--dependencies) INSTALL_DEPENDENCIES=1 ;;
+      -psql|--postgresql) INSTALL_POSTGRES=1 ;;
+      --mysql) INSTALL_MYSQL=1 ;;
+      --nginx) INSTALL_NGINX=1 ;;
+      --apache) INSTALL_APACHE=1 ;;
+      --certbot) INSTALL_CERTBOT=1 ;;
+      --podman) INSTALL_PODMAN=1 ;;
+      --php) INSTALL_PHP=1 ;;
+      --node) INSTALL_NODE=1 ;;
+      --forgejo) INSTALL_FORGEJO=1 ;;
+      *) die "Bilinmeyen seçenek: $1" ;;
+    esac
+    shift
+  done
+}
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -dep|--dependencies)
-      INSTALL_DEPENDENCIES=true
-      ;;
-    -psql|--postgresql)
-      INSTALL_POSTGRES=true
-      ;;
-    --mysql)
-      INSTALL_MYSQL=true
-      ;;
-    --nginx)
-      INSTALL_NGINX=true
-      ;;
-    --apache)
-      INSTALL_APACHE=true
-      ;;
-    --certbot)
-      INSTALL_CERTBOT=true
-      ;;
-    --podman)
-      INSTALL_PODMAN=true
-      ;;
-    --php)
-      INSTALL_PHP=true
-      ;;
-    --node)
-      INSTALL_NODE=true
-      ;;
-    --forgejo)
-      INSTALL_FORGEJO=true
-      ;;
-    *)
-      echo "Unknown option: $1"
-      exit 1
-      ;;
-  esac
-  shift
-done
+apt_update() {
+  apt-get update
+}
 
-if [ "$INSTALL_MYSQL" = true ]; then
-  log "Set MySQL Password!" "info"
-  read -s -p "MySQL root şifresini girin: " MYSQL_ROOT_PASSWORD
-  echo
-  read -s -p "MySQL root şifresini tekrar girin: " MYSQL_ROOT_PASSWORD_AGAIN
-  echo
-  if [ "$MYSQL_ROOT_PASSWORD" != "$MYSQL_ROOT_PASSWORD_AGAIN" ]; then
-    echo "Hata: Şifreler uyuşmuyor."
-    exit 1
+apt_install() {
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+}
+
+run_needrestart() {
+  if command -v needrestart >/dev/null 2>&1; then
+    needrestart -r a
+  else
+    log "needrestart kurulu değil; servis kontrolü atlandı." "info"
   fi
-  echo "mysql-server mysql-server/root_password password $MYSQL_ROOT_PASSWORD" | sudo debconf-set-selections
-  echo "mysql-server mysql-server/root_password_again password $MYSQL_ROOT_PASSWORD" | sudo debconf-set-selections
-fi
+}
 
-# Eşleşme kontrolü
-if [ "$MYSQL_ROOT_PASSWORD" != "$MYSQL_ROOT_PASSWORD_AGAIN" ]; then
-    echo "Hata: Şifreler uyuşmuyor."
-    exit 1
-fi
+collect_mysql_password() {
+  [[ "$INSTALL_MYSQL" -eq 1 ]] || return 0
 
+  require_command debconf-set-selections
+  log "MySQL root parolası hazırlanıyor." "info"
 
-apt update
-needrestart -r a
-if [ "$INSTALL_DEPENDENCIES" = true ]; then
+  read -rsp "MySQL root şifresini girin: " MYSQL_ROOT_PASSWORD
+  echo
+  read -rsp "MySQL root şifresini tekrar girin: " MYSQL_ROOT_PASSWORD_AGAIN
+  echo
+
+  [[ "$MYSQL_ROOT_PASSWORD" == "$MYSQL_ROOT_PASSWORD_AGAIN" ]] ||
+    die "MySQL şifreleri uyuşmuyor."
+
+  printf '%s\n' "mysql-server mysql-server/root_password password $MYSQL_ROOT_PASSWORD" |
+    debconf-set-selections
+  printf '%s\n' "mysql-server mysql-server/root_password_again password $MYSQL_ROOT_PASSWORD" |
+    debconf-set-selections
+}
+
+install_dependencies() {
+  [[ "$INSTALL_DEPENDENCIES" -eq 1 ]] || return 0
+
   log "Dependency installations are started!" "info"
-  apt upgrade -y
-  apt install -y \
-    curl \
-    wget \
-    gnupg \
-    gnupg2 \
-    net-tools \
-    dnsutils \
-    debconf-utils \
-    build-essential \
-    git \
-    nano \
-    vim \
-    git-lfs \
-    lsb-release \
-    ca-certificates \
-    software-properties-common \
-    openssl \
-    uuid-runtime \
-    iproute2 \
-    iputils-ping \
-    netcat-openbsd \
-    lsof \
-    htop \
-    unzip \
-    needrestart \
-    traceroute \
-    tcpdump \
-    jq \
-    tree \
-    zip \
-    tar \
-    rsync
-  needrestart -r a
-  log "Dependency installations are done!" "info"
-fi
-if [ "$INSTALL_NODE" = true ]; then
+  apt-get upgrade -y
+  apt_install \
+    curl wget gnupg gnupg2 net-tools dnsutils debconf-utils build-essential \
+    git nano vim git-lfs lsb-release ca-certificates software-properties-common \
+    openssl uuid-runtime iproute2 iputils-ping netcat-openbsd lsof htop unzip \
+    needrestart traceroute tcpdump jq tree zip tar rsync
+  run_needrestart
+  log "Dependency installations are done!" "success"
+}
+
+install_node() {
+  local setup_script
+
+  [[ "$INSTALL_NODE" -eq 1 ]] || return 0
+
   log "Node installation started!" "info"
-  wget -q https://deb.nodesource.com/setup_20.x -O ./nodesource.sh && \
-  chmod +x ./nodesource.sh && \
-  ./nodesource.sh && \
-  apt update
-  apt install -y nodejs && \
-  rm ./nodesource.sh
-  needrestart -r a
-  log "Node installation done!" "info"
-fi
+  setup_script="$(mktemp /tmp/nodesource.XXXXXX.sh)"
+  wget -q https://deb.nodesource.com/setup_20.x -O "$setup_script"
+  chmod 0700 "$setup_script"
+  bash "$setup_script"
+  rm -f -- "$setup_script"
+  apt_update
+  apt_install nodejs
+  run_needrestart
+  log "Node installation done!" "success"
+}
 
-if [ "$INSTALL_POSTGRES" = true ]; then
+install_postgresql() {
+  [[ "$INSTALL_POSTGRES" -eq 1 ]] || return 0
+
   log "PostgreSQL installation started!" "info"
-  install -d /usr/share/postgresql-common/pgdg && \
-  curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && \
-  . /etc/os-release && \
-  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
-  apt update && \
-  apt -y install postgresql-contrib-17 postgresql-17 
-  needrestart -r a
-  log "PostgreSQL installation done!" "info"
-fi
-if [ "$INSTALL_MYSQL" = true ]; then
-  log "MySQL installation started!" "info"
-  MYSQL_VERSION=$(curl -s "https://dev.mysql.com/downloads/file/?id=541905" | sed -n 's/.*href=".*mysql-apt-config_\([0-9.-]\+\)_all\.deb.*/\1/p')
-  wget https://dev.mysql.com/get/mysql-apt-config_${MYSQL_VERSION}_all.deb
-  dpkg -i mysql-apt-config_${MYSQL_VERSION}_all.deb
-  apt update
-  apt install -y mysql-server
-  needrestart -r a
-  log "MySQL installation done!" "info"
-fi
-if [ "$INSTALL_PHP" = true ]; then
-  log "PHP installation started!" "info"
-  apt install -y curl php8.1 php8.1-mysql php8.1-curl php8.1-mbstring php8.1-fpm
-  log "PHP installation done!" "info"
-fi
+  install -d /usr/share/postgresql-common/pgdg
+  curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+  # shellcheck source=/etc/os-release
+  source /etc/os-release
+  printf '%s\n' \
+    "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main" \
+    >/etc/apt/sources.list.d/pgdg.list
+  apt_update
+  apt_install postgresql-contrib-17 postgresql-17
+  run_needrestart
+  log "PostgreSQL installation done!" "success"
+}
 
-if [ "$INSTALL_PODMAN" = true ]; then
+install_mysql() {
+  local mysql_version
+  local package_file
+
+  [[ "$INSTALL_MYSQL" -eq 1 ]] || return 0
+
+  log "MySQL installation started!" "info"
+  mysql_version="$(
+    curl -fsSL "https://dev.mysql.com/downloads/file/?id=541905" |
+      sed -n 's/.*href=".*mysql-apt-config_\([0-9.-]\+\)_all\.deb.*/\1/p; T; q'
+  )"
+  [[ -n "$mysql_version" ]] || die "MySQL APT paket sürümü belirlenemedi."
+
+  package_file="$(mktemp /tmp/mysql-apt-config.XXXXXX.deb)"
+  wget -O "$package_file" \
+    "https://dev.mysql.com/get/mysql-apt-config_${mysql_version}_all.deb"
+  dpkg -i "$package_file"
+  rm -f -- "$package_file"
+  apt_update
+  apt_install mysql-server
+  run_needrestart
+  log "MySQL installation done!" "success"
+}
+
+install_php() {
+  [[ "$INSTALL_PHP" -eq 1 ]] || return 0
+
+  log "PHP installation started!" "info"
+  apt_install curl php8.1 php8.1-mysql php8.1-curl php8.1-mbstring php8.1-fpm
+  log "PHP installation done!" "success"
+}
+
+install_podman() {
+  [[ "$INSTALL_PODMAN" -eq 1 ]] || return 0
+
   log "Podman dependencies installation started!" "info"
-  apt install -y podman uidmap slirp4netns fuse-overlayfs apparmor apparmor-utils
+  apt_install podman uidmap slirp4netns fuse-overlayfs apparmor apparmor-utils
 
   if apt-cache show passt >/dev/null 2>&1; then
-    apt install -y passt
+    apt_install passt
   else
     log "passt package not found in repositories, skipping passt." "info"
   fi
 
-  needrestart -r a
-  log "Podman dependencies installation done!" "info"
-fi
+  run_needrestart
+  log "Podman dependencies installation done!" "success"
+}
 
-if [ "$INSTALL_NGINX" = true ]; then
+install_nginx() {
+  [[ "$INSTALL_NGINX" -eq 1 ]] || return 0
+
   log "Nginx installation started!" "info"
-  apt install -y nginx
-  if [ -d "/etc/nginx/sites-enabled" ]; then
+  apt_install nginx
+
+  if [[ -d /etc/nginx/sites-enabled ]]; then
     find /etc/nginx/sites-enabled -maxdepth 1 \( -type f -o -type l \) -exec rm -f {} +
     log "Disabled nginx configs in /etc/nginx/sites-enabled" "info"
   fi
 
-  nginx -t && \
-    {
-      systemctl reload nginx || systemctl restart nginx
-    } || \
-    log "Nginx configuration failed!" "error"
-  log "Nginx installation done!" "info"
-fi
+  nginx -t || die "Nginx yapılandırması geçersiz."
+  systemctl reload nginx || systemctl restart nginx
+  log "Nginx installation done!" "success"
+}
 
-if [ "$INSTALL_APACHE" = true ]; then
+install_apache() {
+  [[ "$INSTALL_APACHE" -eq 1 ]] || return 0
+
   log "Apache2 installation started!" "info"
-  apt install -y apache2
-  log "Apache2 installation done!" "info"
-fi
+  apt_install apache2
+  log "Apache2 installation done!" "success"
+}
 
-if [ "$INSTALL_CERTBOT" = true ]; then
+install_certbot() {
+  [[ "$INSTALL_CERTBOT" -eq 1 ]] || return 0
+
   log "Certbot installation started!" "info"
-  apt install -y certbot
+  apt_install certbot
 
-  if [ "$INSTALL_NGINX" = true ]; then
-    apt install -y python3-certbot-nginx
+  if [[ "$INSTALL_NGINX" -eq 1 ]]; then
+    apt_install python3-certbot-nginx
     install -d -m 0755 /etc/letsencrypt
     install -m 0644 \
       /usr/lib/python3/dist-packages/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf \
@@ -228,34 +234,80 @@ if [ "$INSTALL_CERTBOT" = true ]; then
       /etc/letsencrypt/ssl-dhparams.pem
   fi
 
-  if [ "$INSTALL_APACHE" = true ]; then
-    apt install -y python3-certbot-apache
+  if [[ "$INSTALL_APACHE" -eq 1 ]]; then
+    apt_install python3-certbot-apache
   fi
 
-  needrestart -r a
-  log "Certbot installation done!" "info"
-fi
+  run_needrestart
+  log "Certbot installation done!" "success"
+}
 
-if [ "$INSTALL_FORGEJO" = true ]; then
+install_forgejo() {
+  local forgejo_version
+  local forgejo_secret_key
+
+  [[ "$INSTALL_FORGEJO" -eq 1 ]] || return 0
+
   log "Forgejo installation started!" "info"
-  FORGEJO_VERSION=$(curl -s https://codeberg.org/forgejo/forgejo/releases | grep -oP 'forgejo/releases/download/v\K[0-9.]+' | head -n1)
-  wget -O /usr/local/bin/forgejo "https://codeberg.org/forgejo/forgejo/releases/download/v${FORGEJO_VERSION}/forgejo-${FORGEJO_VERSION}-linux-amd64"
-  chmod 755 /usr/local/bin/forgejo
-  id git &>/dev/null || adduser --system --shell /bin/bash --gecos 'Git Version Control' --group --disabled-password --home /home/git git 2>/dev/null || true
-  mkdir /var/lib/forgejo
-  chown git:git /var/lib/forgejo && chmod 750 /var/lib/forgejo
-  mkdir /etc/forgejo
-  FORGEJO_SECRET_KEY=$(openssl rand -hex 64 | tr -d '\n')
-  export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT FORGEJO_SECRET_KEY
-  envsubst '${FORGEJO_DOMAIN} ${FORGEJO_LOOPBACK_PORT} ${FORGEJO_SECRET_KEY}' < ./templates/forgejo/app.ini.template > "/etc/forgejo/app.ini"
-  chown -R root:git /etc/forgejo && chmod 660 /etc/forgejo/app.ini
-  wget -O /etc/systemd/system/forgejo.service https://codeberg.org/forgejo/forgejo/raw/branch/forgejo/contrib/systemd/forgejo.service
-  ./nginx_config_gen.sh -p "http://127.0.0.1:${FORGEJO_LOOPBACK_PORT}" -d "${FORGEJO_DOMAIN}" -ws
+  forgejo_version="$(
+    curl -fsSL https://codeberg.org/forgejo/forgejo/releases |
+      grep -m1 -oP 'forgejo/releases/download/v\K[0-9.]+'
+  )"
+  [[ -n "$forgejo_version" ]] || die "Forgejo sürümü belirlenemedi."
+
+  wget -O /usr/local/bin/forgejo \
+    "https://codeberg.org/forgejo/forgejo/releases/download/v${forgejo_version}/forgejo-${forgejo_version}-linux-amd64"
+  chmod 0755 /usr/local/bin/forgejo
+
+  if ! id git &>/dev/null; then
+    adduser --system --shell /bin/bash --gecos 'Git Version Control' \
+      --group --disabled-password --home /home/git git
+  fi
+
+  install -d -m 0750 -o git -g git /var/lib/forgejo
+  install -d -m 0750 -o root -g git /etc/forgejo
+
+  forgejo_secret_key="$(openssl rand -hex 64 | tr -d '\n')"
+  export FORGEJO_DOMAIN FORGEJO_LOOPBACK_PORT
+  FORGEJO_SECRET_KEY="$forgejo_secret_key" \
+    envsubst '${FORGEJO_DOMAIN} ${FORGEJO_LOOPBACK_PORT} ${FORGEJO_SECRET_KEY}' \
+    <"$SCRIPT_DIR/templates/forgejo/app.ini.template" \
+    > /etc/forgejo/app.ini
+  chown root:git /etc/forgejo/app.ini
+  chmod 0660 /etc/forgejo/app.ini
+
+  wget -O /etc/systemd/system/forgejo.service \
+    https://codeberg.org/forgejo/forgejo/raw/branch/forgejo/contrib/systemd/forgejo.service
+
+  "$SCRIPT_DIR/nginx_config_gen.sh" \
+    -p "http://127.0.0.1:${FORGEJO_LOOPBACK_PORT}" \
+    -d "$FORGEJO_DOMAIN" -ws
+
   systemctl daemon-reload
-  systemctl enable forgejo.service
-  systemctl start forgejo.service
+  systemctl enable --now forgejo.service
   log "Waiting 5 seconds for run forgejo service..." "info"
   sleep 5
-  chmod 640 /etc/forgejo/app.ini && chmod 750 /etc/forgejo
-  log "Forgejo installation done!" "info"
-fi
+  chmod 0640 /etc/forgejo/app.ini
+  chmod 0750 /etc/forgejo
+  log "Forgejo installation done!" "success"
+}
+
+main() {
+  require_root
+  require_commands apt-get date
+  parse_arguments "$@"
+  collect_mysql_password
+  apt_update
+  install_dependencies
+  install_node
+  install_postgresql
+  install_mysql
+  install_php
+  install_podman
+  install_nginx
+  install_apache
+  install_certbot
+  install_forgejo
+}
+
+main "$@"
