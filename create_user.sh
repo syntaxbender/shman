@@ -32,8 +32,16 @@ if [[ -z "$USERNAME" ]]; then
     exit 1
 fi
 
-useradd -m -d /home/$USERNAME -s /bin/bash -U $USERNAME && \
-mkdir -p /home/$USERNAME/public_html && \
-chmod -R 750 /home/$USERNAME && \
-chown -R $USERNAME:$USERNAME /home/$USERNAME && \
-usermod -aG $USERNAME www-data
+if useradd -m -d "/home/$USERNAME" -s /bin/bash -U "$USERNAME" && \
+  mkdir -p "/home/$USERNAME/public_html" && \
+  chmod -R 750 "/home/$USERNAME" && \
+  chown -R "$USERNAME:$USERNAME" "/home/$USERNAME" && \
+  usermod -aG "$USERNAME" www-data; then
+  echo
+  echo "User created: $USERNAME"
+  echo "SSH anahtarı eklemek istersen ssh_client_setup.sh dosyasını"
+  echo "kendi local bilgisayarında çalıştır."
+else
+  echo "Error: user could not be created: $USERNAME" >&2
+  exit 1
+fi
