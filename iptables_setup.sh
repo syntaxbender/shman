@@ -144,6 +144,42 @@ add_udp_port() {
   echo "✓ UDP $port seçildi ($label)"
 }
 
+read_port() {
+  local prompt="$1"
+  local default_port="$2"
+  local result_name="$3"
+  local answer
+  local -n result="$result_name"
+
+  while true; do
+    read -rp "$prompt [$default_port]: " answer
+    answer="${answer:-$default_port}"
+
+    if [[ "$answer" =~ ^[0-9]{1,5}$ ]] && \
+      ((10#$answer >= 1 && 10#$answer <= 65535)); then
+      result="$((10#$answer))"
+      return 0
+    fi
+
+    echo "Geçerli bir port gir (1-65535)."
+  done
+}
+
+detect_ssh_port() {
+  local detected_port=""
+
+  if command -v sshd >/dev/null 2>&1; then
+    detected_port="$(sshd -T 2>/dev/null | awk '$1 == "port" { print $2; exit }' || true)"
+  fi
+
+  if [[ "$detected_port" =~ ^[0-9]{1,5}$ ]] && \
+    ((10#$detected_port >= 1 && 10#$detected_port <= 65535)); then
+    printf '%s\n' "$((10#$detected_port))"
+  else
+    printf '%s\n' 22
+  fi
+}
+
 emit_ipv4_wan_rules() {
   local port
 
@@ -587,6 +623,8 @@ RESET_FORWARD=0
 RESET_OUTPUT=0
 PERSIST_RULES=1
 FWKNOP_PORT=""
+SSH_PORT=""
+SSH_PORT_DEFAULT=22
 IPV6_BOOT_DISABLED=0
 IPV6_RUNTIME_TOUCHED=0
 UFW_PRESENT=0
@@ -653,7 +691,7 @@ echo
 echo "Default profile:"
 echo
 echo "AÇIK:"
-echo "  - SSH            (22)"
+echo "  - SSH            (port çalışma sırasında sorulur)"
 echo "  - HTTP           (80)"
 echo "  - HTTPS          (443)"
 echo "  - SMTP inbound   (25)"
@@ -682,6 +720,7 @@ require_command iptables
 require_command iptables-save
 require_command iptables-restore
 require_command ip
+require_command awk
 
 collect_default_route_interfaces 4 IPV4_WAN_CANDIDATES
 collect_default_route_interfaces 6 IPV6_WAN_CANDIDATES
@@ -741,8 +780,10 @@ fi
 
 echo
 echo "=== SSH ==="
-if ask_default_yes "SSH portu açılsın mı? (22)"; then
-  add_tcp_port 22 "SSH"
+if ask_default_yes "SSH portu WAN'da açılsın mı?"; then
+  SSH_PORT_DEFAULT="$(detect_ssh_port)"
+  read_port "SSH TCP portu" "$SSH_PORT_DEFAULT" SSH_PORT
+  add_tcp_port "$SSH_PORT" "SSH"
 fi
 
 echo
