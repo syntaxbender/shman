@@ -5,8 +5,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-require_root
-
 unit_exists() {
     systemctl cat "$1" &>/dev/null
 }
@@ -33,125 +31,118 @@ disable_unit() {
     fi
 }
 
-echo
-echo "=== Installing basic server tools ==="
+install_basic_server_tools() {
+  echo
+  echo "=== Installing basic server tools ==="
 
-apt-get update
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    curl wget git net-tools dnsutils iputils-ping traceroute tcpdump jq \
+    vim nano htop tree unzip zip tar rsync openssl ca-certificates gnupg \
+    lsof software-properties-common unattended-upgrades
+}
 
-DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    curl \
-    wget \
-    git \
-    net-tools \
-    dnsutils \
-    iputils-ping \
-    traceroute \
-    tcpdump \
-    jq \
-    vim \
-    nano \
-    htop \
-    tree \
-    unzip \
-    zip \
-    tar \
-    rsync \
-    openssl \
-    ca-certificates \
-    gnupg \
-    lsof \
-    software-properties-common \
-    unattended-upgrades
+disable_unnecessary_vm_services() {
+  echo
+  echo "=== Disabling unnecessary VM hardware services ==="
 
-echo
-echo "=== Disabling unnecessary VM hardware services ==="
+  mask_unit fwupd.service
+  mask_unit ModemManager.service
+  mask_unit udisks2.service
+}
 
-mask_unit fwupd.service
-mask_unit ModemManager.service
-mask_unit udisks2.service
+configure_iscsi_services() {
+  local iscsi_in_use=0
 
-echo
-echo "=== Checking iSCSI ==="
+  echo
+  echo "=== Checking iSCSI ==="
 
-ISCSI_IN_USE=0
+  if command -v iscsiadm &>/dev/null &&
+    iscsiadm -m session 2>/dev/null | grep . >/dev/null; then
+    iscsi_in_use=1
+  fi
 
-if command -v iscsiadm &>/dev/null; then
-    if iscsiadm -m session 2>/dev/null | grep -q .; then
-        ISCSI_IN_USE=1
-    fi
-fi
-
-if (( ISCSI_IN_USE )); then
+  if ((iscsi_in_use)); then
     echo "Active iSCSI session found."
     echo "Skipping iSCSI service changes."
-else
-    echo "No active iSCSI sessions."
+    return 0
+  fi
 
-    disable_unit iscsid.service
-    disable_unit iscsid.socket
-    disable_unit open-iscsi.service
-fi
+  echo "No active iSCSI sessions."
+  disable_unit iscsid.service
+  disable_unit iscsid.socket
+  disable_unit open-iscsi.service
+}
 
-echo
-echo "=== Checking NFS ==="
+configure_nfs_services() {
+  echo
+  echo "=== Checking NFS ==="
 
-if findmnt -rn -t nfs,nfs4 | grep -q .; then
+  if findmnt -rn -t nfs,nfs4 | grep . >/dev/null; then
     echo "Active NFS mount found."
     echo "Skipping rpcbind changes."
-else
-    echo "No active NFS mounts."
+    return 0
+  fi
 
-    disable_unit rpcbind.service
-    disable_unit rpcbind.socket
-fi
+  echo "No active NFS mounts."
+  disable_unit rpcbind.service
+  disable_unit rpcbind.socket
+}
 
-echo
-echo "=== Configuring automatic Ubuntu updates ==="
+configure_automatic_updates() {
+  echo
+  echo "=== Configuring automatic Ubuntu updates ==="
 
-cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
+  cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 EOF
 
-# Disable the persistent shutdown helper.
-# apt-daily-upgrade.timer still runs unattended-upgrade when required.
-disable_unit unattended-upgrades.service
+  # Disable the persistent shutdown helper.
+  # apt-daily-upgrade.timer still runs unattended-upgrade when required.
+  disable_unit unattended-upgrades.service
 
-systemctl enable --now apt-daily.timer
-systemctl enable --now apt-daily-upgrade.timer
+  systemctl enable --now apt-daily.timer
+  systemctl enable --now apt-daily-upgrade.timer
+}
 
-echo
-echo "=== Configuring snapd ==="
+configure_snapd() {
+  echo
+  echo "=== Configuring snapd ==="
 
-# Do not keep snapd resident simply because of boot.
-# snapd.socket remains enabled so it can be activated when required.
-if unit_exists snapd.service; then
+  # Do not keep snapd resident simply because of boot.
+  # snapd.socket remains enabled so it can be activated when required.
+  if unit_exists snapd.service; then
     systemctl disable snapd.service || true
     systemctl stop snapd.service || true
-fi
+  fi
 
-if unit_exists snapd.socket; then
+  if unit_exists snapd.socket; then
     systemctl enable --now snapd.socket
-fi
+  fi
 
-echo
-echo "NOTE:"
-echo "Oracle Cloud Agent updater can invoke snap and wake snapd again."
-echo "Oracle Cloud Agent itself is NOT disabled by this script."
+  echo
+  echo "NOTE:"
+  echo "Oracle Cloud Agent updater can invoke snap and wake snapd again."
+  echo "Oracle Cloud Agent itself is NOT disabled by this script."
+}
 
-echo
-echo "=================================================="
-echo " STATUS"
-echo "=================================================="
+print_status() {
+  local unit
 
-echo
-echo "=== Memory ==="
-free -m
+  echo
+  echo "=================================================="
+  echo " STATUS"
+  echo "=================================================="
 
-echo
-echo "=== Service states ==="
+  echo
+  echo "=== Memory ==="
+  free -m
 
-for unit in \
+  echo
+  echo "=== Service states ==="
+
+  for unit in \
     fwupd.service \
     ModemManager.service \
     udisks2.service \
@@ -162,31 +153,43 @@ for unit in \
     rpcbind.socket \
     unattended-upgrades.service \
     snapd.service \
-    snapd.socket
-do
+    snapd.socket; do
     if unit_exists "$unit"; then
-        printf "%-38s enabled=%-10s active=%s\n" \
-            "$unit" \
-            "$(systemctl is-enabled "$unit" 2>/dev/null || true)" \
-            "$(systemctl is-active "$unit" 2>/dev/null || true)"
+      printf "%-38s enabled=%-10s active=%s\n" \
+        "$unit" \
+        "$(systemctl is-enabled "$unit" 2>/dev/null || true)" \
+        "$(systemctl is-active "$unit" 2>/dev/null || true)"
     fi
-done
+  done
 
-echo
-echo "=== Automatic update timers ==="
-
-systemctl list-timers \
+  echo
+  echo "=== Automatic update timers ==="
+  systemctl list-timers \
     apt-daily.timer \
     apt-daily-upgrade.timer \
     --no-pager
 
-echo
-echo "=== Failed units ==="
-systemctl --failed --no-pager
+  echo
+  echo "=== Failed units ==="
+  systemctl --failed --no-pager
 
-echo
-echo "=== Largest processes ==="
-ps -eo pid,user,comm,rss,%mem --sort=-rss | head -20
+  echo
+  echo "=== Largest processes ==="
+  ps -eo pid,user,comm,rss,%mem --sort=-rss | head -20 || true
 
-echo
-echo "=== DONE ==="
+  echo
+  echo "=== DONE ==="
+}
+
+main() {
+  require_root
+  install_basic_server_tools
+  disable_unnecessary_vm_services
+  configure_iscsi_services
+  configure_nfs_services
+  configure_automatic_updates
+  configure_snapd
+  print_status
+}
+
+main "$@"
