@@ -8,18 +8,14 @@ source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 
 DEFAULT_TARGET_USER="ubuntu"
-TARGET_USER=""
+TARGET_USERS=()
+SSH_ALLOW_USERS=""
 SSHD_CONFIG="/etc/ssh/sshd_config"
 MANAGED_CONFIG="/etc/ssh/sshd_config.d/00-shman-hardening.conf"
 
-CONFIG_BACKUP=""
+MANAGED_CONFIG_STAGE=""
 CURRENT_PORT=""
 SSH_PORT=""
-USER_HOME=""
-USER_SHELL=""
-SSH_DIR=""
-AUTHORIZED_KEYS=""
-
 port_is_listening() {
   local port="$1"
 
@@ -34,7 +30,7 @@ set_sshd_option() {
   local value="$2"
 
   upsert_config_line \
-    "$MANAGED_CONFIG" \
+    "$MANAGED_CONFIG_STAGE" \
     "^[[:space:]]*${option}[[:space:]]+" \
     "${option} ${value}" \
     1
@@ -50,58 +46,88 @@ require_dependencies() {
   require_commands "${commands[@]}"
 }
 
-select_target_user() {
+select_target_users() {
   local answer
+  local raw_user
+  local target_user
+  local -a raw_users=()
+  local -A seen_users=()
 
-  read -rp "SSH erişimi verilecek kullanıcı [$DEFAULT_TARGET_USER]: " answer
-  TARGET_USER="${answer:-$DEFAULT_TARGET_USER}"
+  read -rp "SSH erişimi verilecek kullanıcılar (virgülle ayır) [$DEFAULT_TARGET_USER]: " answer
+  answer="${answer:-$DEFAULT_TARGET_USER}"
 
-  [[ "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] ||
-    die "Geçersiz kullanıcı adı: $TARGET_USER"
+  IFS=',' read -r -a raw_users <<<"$answer"
+  for raw_user in "${raw_users[@]}"; do
+    target_user="${raw_user#"${raw_user%%[![:space:]]*}"}"
+    target_user="${target_user%"${target_user##*[![:space:]]}"}"
 
-  [[ "$TARGET_USER" != "root" ]] ||
-    die "Root SSH erişimi bu script tarafından kapatılır; root seçilemez."
+    [[ -n "$target_user" ]] || die "Kullanıcı listesinde boş bir kayıt var."
+    [[ "$target_user" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] ||
+      die "Geçersiz kullanıcı adı: $target_user"
+    [[ "$target_user" != "root" ]] ||
+      die "Root SSH erişimi bu script tarafından kapatılır; root seçilemez."
+
+    if [[ -z "${seen_users[$target_user]:-}" ]]; then
+      TARGET_USERS+=("$target_user")
+      seen_users[$target_user]=1
+    fi
+  done
+
+  [[ "${#TARGET_USERS[@]}" -gt 0 ]] || die "En az bir kullanıcı girilmelidir."
+  SSH_ALLOW_USERS="${TARGET_USERS[*]}"
 }
 
-load_target_user_paths() {
+validate_target_users() {
+  local target_user
   local user_entry
+  local user_home
+  local user_shell
 
-  user_entry="$(getent passwd "$TARGET_USER")" ||
-    die "$TARGET_USER kullanıcısı bulunamadı."
+  for target_user in "${TARGET_USERS[@]}"; do
+    user_entry="$(getent passwd "$target_user")" ||
+      die "$target_user kullanıcısı bulunamadı."
 
-  USER_HOME="$(awk -F: '{ print $6 }' <<<"$user_entry")"
-  USER_SHELL="$(awk -F: '{ print $7 }' <<<"$user_entry")"
+    user_home="$(awk -F: '{ print $6 }' <<<"$user_entry")"
+    user_shell="$(awk -F: '{ print $7 }' <<<"$user_entry")"
 
-  [[ -d "$USER_HOME" ]] ||
-    die "$TARGET_USER kullanıcısının home dizini bulunamadı: $USER_HOME"
+    [[ -d "$user_home" ]] ||
+      die "$target_user kullanıcısının home dizini bulunamadı: $user_home"
 
-  case "$USER_SHELL" in
-    */nologin|*/false)
-      die "$TARGET_USER SSH oturumu açabilen bir kullanıcı değil: $USER_SHELL"
-      ;;
-  esac
-
-  SSH_DIR="$USER_HOME/.ssh"
-  AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
+    case "$user_shell" in
+      */nologin|*/false)
+        die "$target_user SSH oturumu açabilen bir kullanıcı değil: $user_shell"
+        ;;
+    esac
+  done
 }
 
 confirm_authorized_keys() {
+  local target_user
+  local user_entry
+  local user_home
+  local authorized_keys
   local key_summary
 
-  [[ -f "$AUTHORIZED_KEYS" && -s "$AUTHORIZED_KEYS" ]] ||
-    die "Ekli SSH key yok: $AUTHORIZED_KEYS bulunamadı veya boş."
+  for target_user in "${TARGET_USERS[@]}"; do
+    user_entry="$(getent passwd "$target_user")"
+    user_home="$(awk -F: '{ print $6 }' <<<"$user_entry")"
+    authorized_keys="$user_home/.ssh/authorized_keys"
 
-  if ! key_summary="$(ssh-keygen -lf "$AUTHORIZED_KEYS" 2>&1)" ||
-    [[ -z "$key_summary" ]]; then
-    die "$AUTHORIZED_KEYS içinde geçerli bir public key bulunamadı."
-  fi
+    [[ -f "$authorized_keys" && -s "$authorized_keys" ]] ||
+      die "$target_user için ekli SSH key yok: $authorized_keys bulunamadı veya boş."
 
-  echo "Bulunan authorized_keys kayıtları (parmak izi ve yorum):"
-  echo "$key_summary"
-  echo
+    if ! key_summary="$(ssh-keygen -lf "$authorized_keys" 2>&1)" ||
+      [[ -z "$key_summary" ]]; then
+      die "$authorized_keys içinde geçerli bir public key bulunamadı."
+    fi
 
-  ask_default_no "Yukarıdaki key kayıtları doğru mu?" ||
-    die "Key kullanıcı tarafından onaylanmadı."
+    echo "$target_user kullanıcısının authorized_keys kayıtları (parmak izi ve yorum):"
+    echo "$key_summary"
+    echo
+
+    ask_default_no "$target_user için yukarıdaki key kayıtları doğru mu?" ||
+      die "$target_user key kayıtları kullanıcı tarafından onaylanmadı."
+  done
 }
 
 validate_current_sshd_config() {
@@ -137,21 +163,20 @@ validate_selected_port() {
 
 print_apply_notice() {
   echo
-  echo "Uygulanıyor: $TARGET_USER kullanıcısı, yalnız public key, TCP/$SSH_PORT"
+  echo "Uygulanıyor: $SSH_ALLOW_USERS kullanıcıları, yalnız public key, TCP/$SSH_PORT"
   echo "Not: Bu script firewall kuralı eklemez."
 }
 
 prepare_managed_config() {
   install -d -m 0755 /etc/ssh/sshd_config.d
+  MANAGED_CONFIG_STAGE="$(mktemp)"
 
   if [[ -f "$MANAGED_CONFIG" ]]; then
-    CONFIG_BACKUP="$(mktemp /tmp/shman-ssh-config.XXXXXX)"
-    cp -p -- "$MANAGED_CONFIG" "$CONFIG_BACKUP"
+    cp -p -- "$MANAGED_CONFIG" "$MANAGED_CONFIG_STAGE"
     return 0
   fi
 
-  install -m 0644 /dev/null "$MANAGED_CONFIG"
-  printf '%s\n' '# Managed by shman/ssh_server_setup.sh' >>"$MANAGED_CONFIG"
+  printf '%s\n' '# Managed by shman/ssh_server_setup.sh' >"$MANAGED_CONFIG_STAGE"
 }
 
 apply_hardening_options() {
@@ -164,38 +189,39 @@ apply_hardening_options() {
   set_sshd_option ChallengeResponseAuthentication no
   set_sshd_option PermitEmptyPasswords no
   set_sshd_option UsePAM yes
-  set_sshd_option AllowUsers "$TARGET_USER"
+  set_sshd_option AllowUsers "$SSH_ALLOW_USERS"
   set_sshd_option AuthorizedKeysFile .ssh/authorized_keys
   set_sshd_option HostbasedAuthentication no
   set_sshd_option GSSAPIAuthentication no
   set_sshd_option KerberosAuthentication no
-  chmod 0644 "$MANAGED_CONFIG"
 }
 
-restore_managed_config() {
-  if [[ -n "$CONFIG_BACKUP" ]]; then
-    cp -p -- "$CONFIG_BACKUP" "$MANAGED_CONFIG"
-  else
-    rm -f -- "$MANAGED_CONFIG"
-  fi
-}
-
-validate_updated_sshd_config() {
-  if sshd -t -f "$SSHD_CONFIG"; then
-    return 0
-  fi
-
-  restore_managed_config
+install_managed_config() {
+  install_validated_config \
+    "$MANAGED_CONFIG_STAGE" "$MANAGED_CONFIG" 0644 \
+    sshd -t -f "$SSHD_CONFIG" ||
   die "Yeni SSH yapılandırması geçersiz; değişiklik uygulanmadı."
 }
 
 secure_authorized_keys() {
+  local target_user
+  local user_entry
+  local user_home
+  local ssh_dir
+  local authorized_keys
   local target_group
 
-  target_group="$(id -gn "$TARGET_USER")"
-  chown "$TARGET_USER:$target_group" "$SSH_DIR" "$AUTHORIZED_KEYS"
-  chmod 0700 "$SSH_DIR"
-  chmod 0600 "$AUTHORIZED_KEYS"
+  for target_user in "${TARGET_USERS[@]}"; do
+    user_entry="$(getent passwd "$target_user")"
+    user_home="$(awk -F: '{ print $6 }' <<<"$user_entry")"
+    ssh_dir="$user_home/.ssh"
+    authorized_keys="$ssh_dir/authorized_keys"
+    target_group="$(id -gn "$target_user")"
+
+    chown "$target_user:$target_group" "$ssh_dir" "$authorized_keys"
+    chmod 0700 "$ssh_dir"
+    chmod 0600 "$authorized_keys"
+  done
 }
 
 reload_ssh_service() {
@@ -211,26 +237,26 @@ print_completion_summary() {
   echo
   echo "SSH yapılandırması tamamlandı:"
   echo "  Port       : $SSH_PORT"
-  echo "  Kullanıcı  : $TARGET_USER"
+  echo "  Kullanıcılar: $SSH_ALLOW_USERS"
   echo "  Giriş      : yalnız public key"
   echo "  Root/parola: kapalı"
   echo
   echo "Firewall'da TCP/$SSH_PORT portunu açmayı ve mevcut oturumu kapatmadan"
   echo "yeni bir terminalden bağlantıyı test etmeyi unutma:"
-  echo "  ssh -p $SSH_PORT $TARGET_USER@SUNUCU_IP"
+  echo "  ssh -p $SSH_PORT KULLANICI@SUNUCU_IP"
 }
 
 cleanup() {
-  if [[ -n "$CONFIG_BACKUP" ]]; then
-    rm -f -- "$CONFIG_BACKUP"
+  if [[ -n "$MANAGED_CONFIG_STAGE" ]]; then
+    rm -f -- "$MANAGED_CONFIG_STAGE"
   fi
 }
 
 main() {
   require_root
   require_dependencies
-  select_target_user
-  load_target_user_paths
+  select_target_users
+  validate_target_users
   confirm_authorized_keys
   validate_current_sshd_config
   select_ssh_port
@@ -238,7 +264,7 @@ main() {
   print_apply_notice
   prepare_managed_config
   apply_hardening_options
-  validate_updated_sshd_config
+  install_managed_config
   secure_authorized_keys
   reload_ssh_service
   print_completion_summary

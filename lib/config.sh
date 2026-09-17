@@ -20,6 +20,31 @@ restore_file_backup() {
   cp -p -- "$backup_file" "$destination"
 }
 
+install_validated_config() {
+  local candidate_file="$1"
+  local destination="$2"
+  local mode="$3"
+  local rollback_file=""
+  shift 3
+
+  if [[ -f "$destination" ]]; then
+    rollback_file="$(mktemp)"
+    cp -p -- "$destination" "$rollback_file"
+  fi
+
+  if ! install -m "$mode" "$candidate_file" "$destination" || ! "$@"; then
+    if [[ -n "$rollback_file" ]]; then
+      cp -p -- "$rollback_file" "$destination"
+    else
+      rm -f -- "$destination"
+    fi
+    [[ -z "$rollback_file" ]] || rm -f -- "$rollback_file"
+    return 1
+  fi
+
+  [[ -z "$rollback_file" ]] || rm -f -- "$rollback_file"
+}
+
 upsert_config_line() {
   local config_file="$1"
   local match_regex="$2"
