@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 TARGET_USER="${TARGET_USER:-${SUDO_USER:-ubuntu}}"
 TARGET_HOME=""
@@ -24,13 +24,17 @@ load_target_user() {
   echo "Target home: $TARGET_HOME"
 }
 
-install_zsh_packages() {
-  echo
-  echo "=== Installing ZSH environment ==="
+validate_dependencies() {
+  local package
+  local status
 
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    zsh git fzf zsh-autosuggestions zsh-syntax-highlighting
+  require_commands id getent cut install runuser git touch chown cp grep usermod zsh dpkg-query
+
+  for package in zsh git fzf zsh-autosuggestions zsh-syntax-highlighting; do
+    status="$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)"
+    [[ "$status" == "install ok installed" ]] ||
+      die "$package kurulu değil. Önce çalıştır: sudo ./server/install.sh --zsh"
+  done
 }
 
 install_powerlevel10k() {
@@ -133,8 +137,8 @@ print_completion_summary() {
 
 main() {
   require_root
+  validate_dependencies
   load_target_user
-  install_zsh_packages
   install_powerlevel10k
   configure_zshrc
   set_default_shell

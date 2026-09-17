@@ -29,6 +29,14 @@ require_commands() {
   done
 }
 
+require_command_or_install() {
+  local command_name="$1"
+  local install_hint="$2"
+
+  command -v "$command_name" >/dev/null 2>&1 ||
+    die "Gerekli komut bulunamadı: $command_name. Önce çalıştır: $install_hint"
+}
+
 ask_default_yes() {
   local prompt="$1"
   local answer

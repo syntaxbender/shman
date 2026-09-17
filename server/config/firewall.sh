@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 # ==========================
 # Interactive iptables setup
@@ -576,7 +576,6 @@ RULES_V6_EXISTED=0
 RULES_V4_BACKUP=""
 RULES_V6_BACKUP=""
 PERSISTENCE_FILES_TOUCHED=0
-PERSISTENCE_PACKAGES_READY=0
 NETFILTER_WAS_ENABLED=0
 NETFILTER_ENABLE_TOUCHED=0
 PERSIST_V4_STAGE=""
@@ -656,7 +655,11 @@ fi
 
 require_initial_dependencies() {
 # Salt okunur gösterim için gereken IPv4 araçlarını önce doğrula.
-require_commands iptables iptables-save iptables-restore ip awk
+require_command_or_install iptables "sudo ./server/install.sh --firewall"
+require_command_or_install iptables-save "sudo ./server/install.sh --firewall"
+require_command_or_install iptables-restore "sudo ./server/install.sh --firewall"
+require_command_or_install ip "sudo ./server/install.sh --firewall"
+require_command awk
 }
 
 collect_wan_settings() {
@@ -809,9 +812,9 @@ if ! check_external_ipv6_settings "$DESIRED_IPV6_DISABLED"; then
 fi
 
 if [[ -e /proc/sys/net/ipv6/conf/all/disable_ipv6 ]]; then
-  require_command ip6tables
-  require_command ip6tables-save
-  require_command ip6tables-restore
+  require_command_or_install ip6tables "sudo ./server/install.sh --firewall"
+  require_command_or_install ip6tables-save "sudo ./server/install.sh --firewall"
+  require_command_or_install ip6tables-restore "sudo ./server/install.sh --firewall"
 
   if [[ ! -e "/proc/sys/net/ipv6/conf/$IPV6_WAN_INTERFACE/disable_ipv6" ]]; then
     echo "Seçilen WAN arayüzünün IPv6 sysctl kaydı bulunamadı: $IPV6_WAN_INTERFACE" >&2
@@ -825,14 +828,14 @@ fi
 if [[ "$PERSIST_RULES" -eq 1 ]]; then
   require_command systemctl
 
-  if persistence_packages_installed; then
-    PERSISTENCE_PACKAGES_READY=1
-    if systemctl is-enabled --quiet netfilter-persistent; then
-      NETFILTER_WAS_ENABLED=1
-    fi
-  else
-    require_command apt-get
-    require_command dpkg-query
+  if ! persistence_packages_installed; then
+    echo "Kalıcılık paketleri kurulu değil." >&2
+    echo "Önce çalıştır: sudo ./server/install.sh --firewall" >&2
+    exit 1
+  fi
+
+  if systemctl is-enabled --quiet netfilter-persistent; then
+    NETFILTER_WAS_ENABLED=1
   fi
 fi
 }
@@ -902,23 +905,6 @@ fi
 if [[ "$PERSIST_RULES" -eq 1 ]]; then
   # Her iki aile de başarıyla hazırlanmadıkça kalıcı dosyalara dokunma.
   stage_persistent_rules
-
-  if [[ "$PERSISTENCE_PACKAGES_READY" -eq 0 ]]; then
-    # Paket kurulumu servisi başlatırsa eski dosyaları yükleyememeli.
-    PERSISTENCE_FILES_TOUCHED=1
-    rm -f -- /etc/iptables/rules.v4 /etc/iptables/rules.v6
-    NETFILTER_ENABLE_TOUCHED=1
-
-    echo
-    echo "Kalıcılık paketleri kuruluyor..."
-    apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent netfilter-persistent
-
-    if ! persistence_packages_installed; then
-      echo "Kalıcılık paketlerinin kurulumu doğrulanamadı." >&2
-      exit 1
-    fi
-  fi
 
   PERSISTENCE_FILES_TOUCHED=1
   mv -f -- "$PERSIST_V4_STAGE" /etc/iptables/rules.v4

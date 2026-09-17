@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 KERNEL=""
 INITRD=""
@@ -14,25 +14,17 @@ load_kernel_context() {
   echo "Kernel: $KERNEL"
 }
 
-install_zram_generator() {
-  echo
-  echo "=== Installing ZRAM generator ==="
+validate_dependencies() {
+  require_commands \
+    uname modinfo modprobe systemctl swapon awk grep zramctl sysctl \
+    update-initramfs lsinitramfs dpkg-query
 
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y systemd-zram-generator
-}
-
-ensure_zram_module() {
-  if modinfo zram &>/dev/null; then
-    return 0
+  if [[ "$(dpkg-query -W -f='${Status}' systemd-zram-generator 2>/dev/null || true)" != "install ok installed" ]]; then
+    die "systemd-zram-generator kurulu değil. Önce çalıştır: sudo ./server/install.sh --zram"
   fi
 
-  echo "zram module not found."
-  echo "Installing linux-modules-extra-$KERNEL..."
-  DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y "linux-modules-extra-$KERNEL"
-
-  modinfo zram &>/dev/null || die "zram kernel module is still unavailable."
+  modinfo zram &>/dev/null ||
+    die "zram kernel modülü bulunamadı. Önce çalıştır: sudo ./server/install.sh --zram"
 }
 
 configure_zram_generator() {
@@ -135,8 +127,7 @@ print_status() {
 main() {
   require_root
   load_kernel_context
-  install_zram_generator
-  ensure_zram_module
+  validate_dependencies
   configure_zram_generator
   configure_early_module_loading
   configure_swappiness

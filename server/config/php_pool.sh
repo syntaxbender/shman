@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
-# shellcheck source=lib/config.sh
-source "$SCRIPT_DIR/lib/config.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
+# shellcheck source=../../lib/config.sh
+source "$REPO_ROOT/lib/config.sh"
 
 USERNAME=""
 PHP_VERSION=""
@@ -21,7 +21,8 @@ read_target_user() {
 }
 
 collect_php_versions() {
-  [[ -d /etc/php ]] || die "/etc/php dizini bulunamadı."
+  [[ -d /etc/php ]] ||
+    die "/etc/php dizini bulunamadı. Önce çalıştır: sudo ./server/install.sh --php"
 
   mapfile -t PHP_VERSIONS < <(ls /etc/php/ | grep -E '^[0-9]+\.[0-9]+$')
   [[ "${#PHP_VERSIONS[@]}" -gt 0 ]] || die "Hiçbir PHP sürümü bulunamadı."

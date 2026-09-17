@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
-# shellcheck source=lib/config.sh
-source "$SCRIPT_DIR/lib/config.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
+# shellcheck source=../../lib/config.sh
+source "$REPO_ROOT/lib/config.sh"
 
 DEFAULT_TARGET_USER="ubuntu"
 TARGET_USERS=()
@@ -37,9 +37,9 @@ set_sshd_option() {
 }
 
 require_dependencies() {
-  local command_name
+  require_command_or_install sshd "sudo ./server/install.sh --ssh"
   local commands=(
-    getent id sshd ssh-keygen systemctl install mktemp cp rm chmod chown
+    getent id ssh-keygen systemctl install mktemp cp rm chmod chown
     awk ss grep sed
   )
 
@@ -176,7 +176,7 @@ prepare_managed_config() {
     return 0
   fi
 
-  printf '%s\n' '# Managed by shman/ssh_server_setup.sh' >"$MANAGED_CONFIG_STAGE"
+  printf '%s\n' '# Managed by shman/server/config/ssh.sh' >"$MANAGED_CONFIG_STAGE"
 }
 
 apply_hardening_options() {

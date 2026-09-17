@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 SVC_NAME=""
 TARGET_USER=""
@@ -78,7 +78,7 @@ render_unit() {
   DESC="$DESCRIPTION" \
   PORT_LINE="$port_line" \
   ENV_FILE_LINE="$env_file_line" \
-    envsubst <"$SCRIPT_DIR/templates/systemd/service.template" >"$TEMP_UNIT"
+    envsubst <"$REPO_ROOT/templates/systemd/service.template" >"$TEMP_UNIT"
 }
 
 install_unit() {
@@ -98,7 +98,9 @@ cleanup() {
 
 main() {
   require_root
-  require_commands id envsubst mktemp systemd-analyze install systemctl rm
+  require_command_or_install npm "sudo ./server/install.sh --node"
+  require_command_or_install envsubst "sudo ./server/install.sh --node"
+  require_commands id mktemp systemd-analyze install systemctl rm
   parse_arguments "$@"
   validate_inputs
   render_unit

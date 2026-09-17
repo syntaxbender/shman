@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 KEY_NAME=""
 KEY_DIR="/mnt/shman-ssh"
@@ -15,7 +15,10 @@ REMOTE_HOST=""
 SSH_PORT=""
 
 require_dependencies() {
-  require_commands ssh ssh-keygen ssh-copy-id sudo mount findmnt id mkdir chmod
+  require_command_or_install ssh "sudo ./client/install.sh --ssh"
+  require_command_or_install ssh-keygen "sudo ./client/install.sh --ssh"
+  require_command_or_install ssh-copy-id "sudo ./client/install.sh --ssh"
+  require_commands sudo mount findmnt id mkdir chmod
 }
 
 harden_process_environment() {

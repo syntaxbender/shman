@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
-# shellcheck source=lib/config.sh
-source "$SCRIPT_DIR/lib/config.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
+# shellcheck source=../../lib/config.sh
+source "$REPO_ROOT/lib/config.sh"
 
 PROXY_PASS=""
 DOMAIN=""
@@ -115,12 +115,12 @@ render_config() {
   LISTEN_LINE="$listen_line" \
   SSL_LINES="$ssl_lines" \
     envsubst '${LISTEN_LINE} ${SERVER_NAME_LINE} ${PROXY_PASS} ${WEBSOCKET_LINE} ${SSL_LINES}' \
-    <"$SCRIPT_DIR/templates/nginx/site.template" >"$TEMP_CONFIG"
+    <"$REPO_ROOT/templates/nginx/site.template" >"$TEMP_CONFIG"
 
   if [[ "$WWW_REDIRECT" -eq 1 ]]; then
     DOMAIN="$DOMAIN" LISTEN_LINE="$listen_line" SSL_LINES="$ssl_lines" \
       envsubst '${LISTEN_LINE} ${DOMAIN} ${SSL_LINES}' \
-      <"$SCRIPT_DIR/templates/nginx/site_redirect.template" >>"$TEMP_CONFIG"
+      <"$REPO_ROOT/templates/nginx/site_redirect.template" >>"$TEMP_CONFIG"
   fi
 }
 
@@ -157,7 +157,9 @@ cleanup() {
 
 main() {
   require_root
-  require_commands envsubst mktemp install ln nginx systemctl cp grep sed basename date mkdir
+  require_command_or_install nginx "sudo ./server/install.sh --nginx"
+  require_command_or_install envsubst "sudo ./server/install.sh --nginx"
+  require_commands mktemp install ln systemctl cp grep sed basename date mkdir
   parse_arguments "$@"
   validate_inputs
   capture_existing_config

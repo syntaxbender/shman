@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# shellcheck source=../lib/common.sh
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
 source "$REPO_ROOT/lib/common.sh"
 
 PROFILE=""
@@ -91,15 +91,26 @@ remove_existing_artifacts() {
   [[ -n "$HMAC_EXISTS" ]] && rm -f "$HMAC_FILE"
 }
 
-install_dependencies() {
-  info "Paketler kuruluyor..."
-  apt update
-  apt install -y fwknop-server fwknop-client gnupg iptables-persistent netfilter-persistent openssl
+validate_dependencies() {
+  local package
+  local status
+
+  require_commands gpg openssl awk mktemp tr chown chmod rm dpkg-query
+
+  for package in fwknop-server fwknop-client gnupg iptables-persistent netfilter-persistent openssl; do
+    status="$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)"
+    [[ "$status" == "install ok installed" ]] ||
+      die "$package kurulu değil. Önce çalıştır: sudo ./server/install.sh --fwknop"
+  done
 }
 
 disable_ufw() {
-  info "UFW kapatılıyor..."
-  ufw disable || true
+  if command -v ufw >/dev/null 2>&1; then
+    info "UFW kapatılıyor..."
+    ufw disable || true
+  else
+    info "UFW kurulu değil; kapatma adımı atlandı."
+  fi
 
   info "iptables/IPv6 yönetimi yapılmıyor."
   info "Firewall kuralları bu script tarafından oluşturulmaz."
@@ -181,7 +192,7 @@ HMAC key:
   $HMAC_FILE
 
 Sonraki adım client tarafında:
-  ./fwknop_client_exchange.sh
+  ./client/config/fwknop_exchange.sh
 
 Client exchange sırasında aynı profile adını kullan.
 Server finalize adımında interface ve SPA port bilgisi istenecek.
@@ -197,13 +208,13 @@ cleanup() {
 
 main() {
   require_root
+  validate_dependencies
   collect_inputs
   derive_paths
   print_derived_values
   prepare_gpg_home
   detect_existing_artifacts
   remove_existing_artifacts
-  install_dependencies
   disable_ufw
   create_server_gpg_key
   export_server_public_key

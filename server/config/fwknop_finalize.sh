@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# shellcheck source=../lib/common.sh
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
 source "$REPO_ROOT/lib/common.sh"
-# shellcheck source=../lib/config.sh
+# shellcheck source=../../lib/config.sh
 source "$REPO_ROOT/lib/config.sh"
 
 upsert_conf_line() {
@@ -124,7 +124,7 @@ load_server_private_key() {
   )"
   [[ -n "$SERVER_KEY_ID" ]] || die "Root keyring içinde server secret key bulunamadı: $SERVER_GPG_EMAIL
 
-Önce fwknop_server_prepare.sh adımını çalıştır veya key'i root keyring'e import et."
+Önce ./server/config/fwknop_prepare.sh adımını çalıştır veya key'i root keyring'e import et."
 }
 
 load_client_public_key_id() {
@@ -250,7 +250,14 @@ restart_fwknop_server() {
 
 require_firewall_dependencies() {
   info "iptables ortamı kontrol ediliyor..."
-  require_commands iptables iptables-save netfilter-persistent
+  require_command_or_install iptables "sudo ./server/install.sh --fwknop"
+  require_command_or_install netfilter-persistent "sudo ./server/install.sh --fwknop"
+  require_commands iptables-save
+}
+
+validate_dependencies() {
+  require_command_or_install fwknopd "sudo ./server/install.sh --fwknop"
+  require_commands gpg systemctl awk grep tr mkdir chmod touch ip6tables-save
 }
 
 verify_firewall_baseline() {
@@ -376,6 +383,8 @@ EOF
 
 main() {
   require_root
+  validate_dependencies
+  require_firewall_dependencies
   collect_inputs
   derive_paths
   print_derived_values
@@ -390,7 +399,6 @@ main() {
   write_access_config
   update_fwknopd_config
   restart_fwknop_server
-  require_firewall_dependencies
   verify_firewall_baseline
   collect_ssh_rules
   remove_ssh_rules

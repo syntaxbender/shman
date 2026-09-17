@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
-# shellcheck source=lib/config.sh
-source "$SCRIPT_DIR/lib/config.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
+# shellcheck source=../../lib/config.sh
+source "$REPO_ROOT/lib/config.sh"
 
 SERVER_IP=""
 TARGET_CONFIG="/etc/nginx/sites-available/default"
@@ -134,7 +134,11 @@ cleanup() {
 
 main() {
   require_root
-  require_commands curl wget mktemp install openssl chmod nginx systemctl ln cp grep sed basename date mkdir
+  require_command_or_install nginx "sudo ./server/install.sh --nginx"
+  require_command_or_install curl "sudo ./server/install.sh --nginx"
+  require_command_or_install wget "sudo ./server/install.sh --nginx"
+  require_command_or_install openssl "sudo ./server/install.sh --nginx"
+  require_commands mktemp install chmod systemctl ln cp grep sed basename date mkdir
   detect_server_ip
   prepare_web_assets
   prepare_fallback_certificate

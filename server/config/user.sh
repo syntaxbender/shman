@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 USERNAME=""
 USER_HOME=""
@@ -74,10 +74,10 @@ print_ssh_key_instructions() {
   echo "Bu kullanıcı SSH/shell erişimi alacak."
   echo "Her SSH kullanıcısına özel bir public key, o kullanıcının"
   echo "$USER_HOME/.ssh/authorized_keys dosyasına kopyalanmalıdır."
-  echo "Local bilgisayarda ssh_client_setup.sh dosyasının çalıştırılması gerekir."
+  echo "Local bilgisayarda ./client/config/ssh_key.sh çalıştırılmalıdır."
   echo "ssh-copy-id, ilk key kopyalamasında bu kullanıcı için oluşturma"
   echo "sırasında belirlenen parolayı isteyecektir."
-  echo "Key kopyalandıktan sonra ssh_server_setup.sh ile parola tabanlı"
+  echo "Key kopyalandıktan sonra ./server/config/ssh.sh ile parola tabanlı"
   echo "SSH girişi kapatılabilir."
   echo
 }

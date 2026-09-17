@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# shellcheck source=../lib/common.sh
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
 source "$REPO_ROOT/lib/common.sh"
 
 profile_exists_in_fwknoprc() {
@@ -125,10 +125,12 @@ create_workspace() {
   LOCAL_TMP="$(mktemp -d)"
 }
 
-install_dependencies() {
-  info "Client paketleri kuruluyor..."
-  sudo apt update
-  sudo apt install -y fwknop-client gnupg openssh-client
+validate_dependencies() {
+  require_command_or_install fwknop "sudo ./client/install.sh --fwknop"
+  require_command_or_install gpg "sudo ./client/install.sh --fwknop"
+  require_command_or_install ssh "sudo ./client/install.sh --fwknop"
+  require_command_or_install scp "sudo ./client/install.sh --fwknop"
+  require_commands awk grep mktemp chmod mv rm mkdir tr
 }
 
 configure_ssh_options() {
@@ -292,7 +294,7 @@ Client public key server'a gönderildi:
   $CLIENT_PUB_REMOTE
 
 Sonraki adım server tarafında:
-  sudo ./fwknop_server_finalize.sh
+  sudo ./server/config/fwknop_finalize.sh
 
 Finalize sırasında aynı profile adını ve SPA portunu gir.
 
@@ -313,12 +315,12 @@ cleanup() {
 }
 
 main() {
+  validate_dependencies
   collect_inputs
   derive_profile_values
   detect_existing_profile
   remove_existing_profile
   create_workspace
-  install_dependencies
   configure_ssh_options
   discover_remote_paths
   print_derived_values

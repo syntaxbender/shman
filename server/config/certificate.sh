@@ -1,13 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 WEB_SERVER="nginx"
 INPUT_DOMAINS=()
 CERTBOT_DOMAINS=()
+
+prepare_nginx_tls_files() {
+  local tls_source="/usr/lib/python3/dist-packages/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf"
+  local dhparam_source="/usr/lib/python3/dist-packages/certbot/ssl-dhparams.pem"
+
+  [[ "$WEB_SERVER" == "nginx" ]] || return 0
+  [[ -f "$tls_source" && -f "$dhparam_source" ]] ||
+    die "Certbot Nginx eklentisi eksik. Önce çalıştır: sudo ./server/install.sh --certbot"
+
+  install -d -m 0755 /etc/letsencrypt
+  install -m 0644 "$tls_source" /etc/letsencrypt/options-ssl-nginx.conf
+  install -m 0644 "$dhparam_source" /etc/letsencrypt/ssl-dhparams.pem
+}
 
 parse_arguments() {
   while [[ $# -gt 0 ]]; do
@@ -92,9 +105,11 @@ request_certificate() {
 
 main() {
   require_root
-  require_commands certbot awk sort cut
+  require_command_or_install certbot "sudo ./server/install.sh --certbot"
+  require_commands awk sort cut install
   parse_arguments "$@"
   validate_inputs
+  prepare_nginx_tls_files
   collect_certificate_domains
   request_certificate
 }

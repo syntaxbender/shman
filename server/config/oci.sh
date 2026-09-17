@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# shellcheck source=../../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
 
 unit_exists() {
     systemctl cat "$1" &>/dev/null
@@ -31,15 +31,12 @@ disable_unit() {
     fi
 }
 
-install_basic_server_tools() {
-  echo
-  echo "=== Installing basic server tools ==="
+validate_dependencies() {
+  require_commands systemctl findmnt free ps grep head dpkg-query
 
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    curl wget git net-tools dnsutils iputils-ping traceroute tcpdump jq \
-    vim nano htop tree unzip zip tar rsync openssl ca-certificates gnupg \
-    lsof software-properties-common unattended-upgrades
+  if [[ "$(dpkg-query -W -f='${Status}' unattended-upgrades 2>/dev/null || true)" != "install ok installed" ]]; then
+    die "unattended-upgrades kurulu değil. Önce çalıştır: sudo ./server/install.sh --base"
+  fi
 }
 
 disable_unnecessary_vm_services() {
@@ -183,7 +180,7 @@ print_status() {
 
 main() {
   require_root
-  install_basic_server_tools
+  validate_dependencies
   disable_unnecessary_vm_services
   configure_iscsi_services
   configure_nfs_services
