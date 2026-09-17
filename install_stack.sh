@@ -69,11 +69,7 @@ apt_install() {
 }
 
 run_needrestart() {
-  if command -v needrestart >/dev/null 2>&1; then
-    needrestart -r a
-  else
-    log "needrestart kurulu değil; servis kontrolü atlandı." "info"
-  fi
+  needrestart -r a
 }
 
 collect_mysql_password() {
@@ -153,8 +149,10 @@ install_mysql() {
 
   log "MySQL installation started!" "info"
   mysql_version="$(
-    curl -fsSL "https://dev.mysql.com/downloads/file/?id=541905" |
-      sed -n 's/.*href=".*mysql-apt-config_\([0-9.-]\+\)_all\.deb.*/\1/p; T; q'
+    curl -fsSL "https://dev.mysql.com/downloads/repo/apt/" |
+      sed -n 's/.*mysql-apt-config_\([0-9][0-9.-]*\)_all\.deb.*/\1/p' |
+      sort -Vu |
+      tail -n 1
   )"
   [[ -n "$mysql_version" ]] || die "MySQL APT paket sürümü belirlenemedi."
 
@@ -173,7 +171,7 @@ install_php() {
   [[ "$INSTALL_PHP" -eq 1 ]] || return 0
 
   log "PHP installation started!" "info"
-  apt_install curl php8.1 php8.1-mysql php8.1-curl php8.1-mbstring php8.1-fpm
+  apt_install curl php php-mysql php-curl php-mbstring php-fpm
   log "PHP installation done!" "success"
 }
 
@@ -294,7 +292,7 @@ install_forgejo() {
 
 main() {
   require_root
-  require_commands apt-get date
+  require_commands apt-get date needrestart
   parse_arguments "$@"
   collect_mysql_password
   apt_update
