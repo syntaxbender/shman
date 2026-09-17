@@ -8,8 +8,9 @@ RUN_MODE      = prod
 APP_NAME            = SyntaxBender Private Git Service
 PROTOCOL            = http
 DOMAIN              = ${FORGEJO_DOMAIN}
+HTTP_ADDR           = 127.0.0.1
 HTTP_PORT           = ${FORGEJO_LOOPBACK_PORT}
-ROOT_URL            = %(PROTOCOL)s://%(DOMAIN)s:%(HTTP_PORT)s/
+ROOT_URL            = ${FORGEJO_ROOT_URL}
 DISABLE_SSH         = false
 SSH_PORT            = 22
 START_SSH_SERVER    = false
@@ -21,7 +22,7 @@ REDIRECT_OTHER_PORT = true
 PORT_TO_REDIRECT    = 80
 OFFLINE_MODE        = false
 ENABLE_PPROF        = false
-SSH_DOMAIN = git.example.com
+SSH_DOMAIN = ${FORGEJO_DOMAIN}
 APP_DATA_PATH = /var/lib/forgejo/data
 
 [database]
@@ -52,7 +53,7 @@ DEFAULT_KEEP_EMAIL_PRIVATE = true
 ENABLE_CAPTCHA = false
 DEFAULT_ALLOW_CREATE_ORGANIZATION = false
 DEFAULT_ENABLE_TIMETRACKING = false
-NO_REPLY_ADDRESS = noreply.git.example.com
+NO_REPLY_ADDRESS = noreply.${FORGEJO_DOMAIN}
 
 [mailer]
 ENABLED         = false
